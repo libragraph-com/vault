@@ -455,6 +455,101 @@ public class ScheduledTasks {
 
 See [Quarkus Scheduler](https://quarkus.io/guides/scheduler).
 
+## Workflow Triggers
+
+Tasks are often created automatically in response to events. A **workflow**
+declares triggers with match expressions — the system evaluates the predicate
+against the event and creates the task only when it matches.
+
+### @Trigger Annotation
+
+```java
+@WorkflowDef("content-analysis")
+public class ContentAnalysisWorkflow {
+
+    @Trigger(on = ObjectCreatedEvent.class, match = "mimeType = 'audio/mpeg'")
+    public TaskSpec<?> onMp3Created(ObjectCreatedEvent event) {
+        return TaskSpec.of(ExtractId3TagsTask.class,
+            new ExtractId3Input(event.hash()), 150);
+    }
+
+    @Trigger(on = ObjectCreatedEvent.class, match = "mimeType startsWith 'image/'")
+    public TaskSpec<?> onImageCreated(ObjectCreatedEvent event) {
+        return TaskSpec.of(ExtractExifTask.class,
+            new ExtractExifInput(event.hash()), 100);
+    }
+}
+```
+
+- `on` — The event type that triggers evaluation
+- `match` — Expression evaluated against the event fields
+- Return `TaskSpec` describing which task to create, with what input and priority
+
+### Expression Engine
+
+Match expressions support property access, comparison, and string operations:
+
+```
+mimeType = 'audio/mpeg'                    # Equality
+size > 1048576                             # Comparison
+mimeType startsWith 'image/'              # String prefix
+mimeType contains 'zip' AND size > 1024   # Logical AND
+filename endsWith '.pdf' OR mimeType = 'application/pdf'  # Logical OR
+```
+
+The expression engine is intentionally simple — no scripting language, no
+Turing completeness. It evaluates event record fields via reflection.
+
+### @JoinTrigger (Fan-In)
+
+For workflows that need multiple events before creating a task:
+
+```java
+@JoinTrigger(
+    taskTypes = {"extract.id3", "extract.exif"},
+    joinKey = "hash",
+    workflow = "post-enrichment"
+)
+public TaskSpec<?> onAllEnrichmentsComplete(List<TaskCompletedEvent> events) {
+    return TaskSpec.of(BuildSearchIndexTask.class, new BuildSearchInput(hash));
+}
+```
+
+Join state is tracked in a `task_joins` table:
+
+```sql
+CREATE TABLE task_joins (
+    join_key        VARCHAR(256) NOT NULL,
+    workflow_id     VARCHAR(128) NOT NULL,
+    task_type       VARCHAR(128) NOT NULL,
+    task_id         UUID REFERENCES tasks(id),
+    completed_at    TIMESTAMPTZ,
+    PRIMARY KEY (join_key, workflow_id, task_type)
+);
+```
+
+### TriggerRegistry
+
+CDI bean that discovers `@WorkflowDef` classes, subscribes triggers to the
+event system, evaluates match expressions, and dispatches `TaskSpec` to
+TaskService when predicates are satisfied.
+
+```java
+@ApplicationScoped
+public class TriggerRegistry {
+
+    @Inject Instance<Object> workflowDefs;  // All @WorkflowDef beans
+    @Inject TaskService taskService;
+    @Inject ExpressionEngine expressionEngine;
+
+    @PostConstruct
+    void init() {
+        // Scan @WorkflowDef beans for @Trigger methods
+        // Subscribe to event types, evaluate match expressions on fire
+    }
+}
+```
+
 ## Extensibility
 
 New tasks are added by:
@@ -462,11 +557,19 @@ New tasks are added by:
 2. Annotate with `@ApplicationScoped`
 3. CDI discovers it automatically
 
+New workflow triggers are added by:
+1. Create a `@WorkflowDef` class
+2. Add `@Trigger` methods with match expressions
+3. Return `TaskSpec` describing the task to create
+4. CDI discovers it automatically
+
 Examples of extension tasks:
-- Virus scanner (ClamAV integration)
-- OCR extraction (Tesseract)
-- Embedding generation (Ollama/OpenAI, throttled via `requireResource("ollama")`)
+- ID3 tag extraction (`mimeType = 'audio/mpeg'`)
+- EXIF extraction (`mimeType startsWith 'image/'`)
+- OCR extraction (`mimeType = 'application/pdf'`)
+- Virus scanning (all files, `size > 0`)
+- Embedding generation (`mimeType startsWith 'text/'`, throttled via `requireResource("ollama")`)
 
 > **DEPENDENCY:** Task execution depends on [Events](Events.md) for the
-> Background task pattern, service state tracking, and [Database](Database.md)
-> for persistence.
+> Background task pattern, workflow triggers, service state tracking, and
+> [Database](Database.md) for persistence.

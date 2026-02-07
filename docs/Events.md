@@ -147,6 +147,86 @@ See [Quarkus Event Bus](https://quarkus.io/guides/reactive-event-bus).
 > sufficient for single-process. Vert.x Event Bus only if we need clustering
 > later (unlikely near-term).
 
+## Handler Contract (@Consumes/@Emits)
+
+Event handlers declare their input/output contract via annotations. This enables
+compile-time routing table generation and chain validation (every `@Emits` type
+has a `@Consumes` handler).
+
+### Functional Handlers
+
+Handlers are plain classes with annotated methods, not workflows or tasks:
+
+```java
+@ApplicationScoped
+public class ProcessContainerHandler {
+
+    @Inject BlobService blobService;
+    @Inject FormatRegistry formatRegistry;
+    @Inject Event<ChildDiscoveredEvent> childEvent;
+
+    @Consumes(IngestFileEvent.class)
+    @Emits({ChildDiscoveredEvent.class, ContainerCompleteEvent.class})
+    public void handle(IngestFileEvent event) {
+        // Extract children from container
+        List<ContainerChild> children = plugin.extractChildren(buffer);
+
+        // Create fan-in context
+        FanInContext fanIn = new FanInContext(UUID.randomUUID(), children.size(), event.fanIn());
+
+        // Fire event per child
+        for (ContainerChild child : children) {
+            childEvent.fire(new ChildDiscoveredEvent(child, fanIn));
+        }
+    }
+}
+```
+
+**Key points:**
+- `@Consumes(EventType.class)` — declares what event triggers this handler
+- `@Emits({...})` — declares what events this handler can fire
+- Synchronous methods — `.block()` on reactive services at the boundary
+- One handler per event type (exactly-once dispatch)
+- CDI `@Observes` still works for observation (metrics, logging)
+
+### Chain Validation
+
+At startup, validate that every `@Emits` type has a registered `@Consumes` handler:
+
+```java
+@ApplicationScoped
+public class EventPipeline {
+
+    @Inject Instance<Object> handlers;  // All @ApplicationScoped beans
+
+    @PostConstruct
+    void init() {
+        Set<Class<?>> consumed = new HashSet<>();
+        Set<Class<?>> emitted = new HashSet<>();
+
+        for (Object handler : handlers) {
+            for (Method method : handler.getClass().getDeclaredMethods()) {
+                if (method.isAnnotationPresent(Consumes.class)) {
+                    consumed.add(method.getAnnotation(Consumes.class).value());
+                }
+                if (method.isAnnotationPresent(Emits.class)) {
+                    emitted.addAll(Arrays.asList(method.getAnnotation(Emits.class).value()));
+                }
+            }
+        }
+
+        Set<Class<?>> orphaned = new HashSet<>(emitted);
+        orphaned.removeAll(consumed);
+
+        if (!orphaned.isEmpty()) {
+            throw new IllegalStateException("Events emitted but not consumed: " + orphaned);
+        }
+    }
+}
+```
+
+This catches broken event chains at startup, not at runtime.
+
 ## Observability
 
 Both mechanisms support observation for metrics/logging:

@@ -5,9 +5,9 @@ See [README.md](README.md) for overview and documentation index.
 ## Quick Context
 
 - **Framework:** Quarkus (CDI/ArC, SmallRye Config, RESTEasy Reactive)
-- **Language:** Java 21 (virtual threads)
-- **Build:** Gradle (multi-module, Quarkus plugin)
-- **Database:** PostgreSQL 18 (JDBI manual wiring, Flyway migrations)
+- **Language:** Java 25, `--release 21` bytecode (virtual threads)
+- **Build:** Gradle 9.3.1 (multi-module, Quarkus 3.31.2 plugin)
+- **Database:** PostgreSQL 17 (JDBI manual wiring, Flyway migrations)
 - **Architecture:** Event-driven, content-addressed storage
 
 ## Key Decisions

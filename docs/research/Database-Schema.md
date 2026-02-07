@@ -99,29 +99,51 @@ CREATE INDEX idx_entries_target ON entries(target_hash);
 CREATE INDEX idx_containers_parent ON containers(parent_id);
 ```
 
-## Tasks Table
+## Tasks Tables
 
 Background task persistence (see [Tasks](../Tasks.md)):
 
 ```sql
 CREATE TABLE tasks (
-    id              UUID PRIMARY KEY,       -- UUIDv7, generated in Java
-    task_type       TEXT NOT NULL,
-    status          SMALLINT NOT NULL,      -- 0=pending, 1=running, 2=blocked, 3=complete, 4=error
-    input           JSONB NOT NULL,
-    output          JSONB,
-    parent_id       UUID,                   -- Subtask parent
-    tenant_id       UUID NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL,
-    started_at      TIMESTAMPTZ,
-    completed_at    TIMESTAMPTZ,
-    error           TEXT,
-    FOREIGN KEY (parent_id) REFERENCES tasks(id)
+    id                      UUID PRIMARY KEY,        -- UUIDv7, generated in Java
+    type                    VARCHAR(128) NOT NULL,   -- From taskType()
+    status                  VARCHAR(32) NOT NULL,    -- OPEN, IN_PROGRESS, BLOCKED, BACKGROUND, COMPLETE, ERROR, DEAD
+    priority                SMALLINT DEFAULT 128,    -- 0-255, higher = more urgent
+
+    input                   JSONB NOT NULL,          -- Serialized task input
+    output                  JSONB,                   -- Serialized task output
+
+    error_message           TEXT,
+    error_type              VARCHAR(256),
+    retryable               BOOLEAN,
+    retry_count             INTEGER DEFAULT 0,
+
+    claimed_by              VARCHAR(128),            -- Worker node ID
+    background_timeout_at   TIMESTAMPTZ,             -- Stale BG detection
+
+    parent_id               UUID REFERENCES tasks(id),
+    tenant_id               UUID NOT NULL,
+    created_at              TIMESTAMPTZ NOT NULL,
+    claimed_at              TIMESTAMPTZ,
+    completed_at            TIMESTAMPTZ
 );
 
+CREATE TABLE task_dependencies (
+    blocked_task_id     UUID REFERENCES tasks(id),
+    blocking_task_id    UUID REFERENCES tasks(id),
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (blocked_task_id, blocking_task_id)
+);
+
+CREATE INDEX idx_tasks_claim ON tasks(priority DESC, created_at ASC)
+    WHERE status = 'OPEN' AND claimed_by IS NULL;
 CREATE INDEX idx_tasks_tenant ON tasks(tenant_id);
-CREATE INDEX idx_tasks_status ON tasks(status) WHERE status < 3;
 CREATE INDEX idx_tasks_parent ON tasks(parent_id);
+CREATE INDEX idx_tasks_stale_bg ON tasks(background_timeout_at)
+    WHERE status = 'BACKGROUND';
+CREATE INDEX idx_tasks_stale_claimed ON tasks(claimed_at)
+    WHERE status = 'IN_PROGRESS';
+CREATE INDEX idx_task_deps_blocking ON task_dependencies(blocking_task_id);
 ```
 
 ## UUIDv7 Function

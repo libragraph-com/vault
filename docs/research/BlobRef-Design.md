@@ -1,8 +1,8 @@
 # BlobRef Design Specification
 
-**Status:** Proposed (Quarkus rebuild)
+**Status:** Implemented
 **Last Updated:** 2026-02-07
-**Reference:** `vault-mvp/shared/types/.../BlobRef.java` (current implementation)
+**Location:** `shared/utils/src/main/java/com/libragraph/vault/util/BlobRef.java`
 
 ## Overview
 

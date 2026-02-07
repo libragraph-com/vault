@@ -1,7 +1,7 @@
 # Object Store
 
-**Status:** Proposed design for Quarkus rebuild
-**Reference:** `vault-mvp/modules/core/.../ObjectStorage.java`
+**Status:** Implemented
+**Reference:** `modules/core/src/main/java/com/libragraph/vault/core/storage/ObjectStorage.java`
 
 Blob storage abstraction for filesystem, MinIO, and S3.
 
@@ -119,20 +119,16 @@ See `shared/utils/src/main/java/com/libragraph/vault/util/buffer/BinaryData.java
 ### Configuration
 
 ```properties
-# Dev - filesystem
+# Filesystem (test/dev)
 vault.object-store.type=filesystem
 vault.object-store.filesystem.root=/var/vault/blobs
 
-# Dev/Prod - MinIO (S3-compatible)
+# MinIO / S3 (dev/prod)
 vault.object-store.type=s3
-quarkus.s3.endpoint-override=http://minio:9000  # Dev only
-quarkus.s3.aws.region=us-east-1
+vault.minio.endpoint=http://localhost:9000
+vault.minio.access-key=minioadmin
+vault.minio.secret-key=minioadmin
 vault.object-store.bucket-prefix=vault-
-
-# Prod - Real S3
-vault.object-store.type=s3
-quarkus.s3.aws.region=us-west-2
-vault.object-store.bucket-prefix=vault-prod-
 ```
 
 > **See [research/Compression.md](research/Compression.md) for compression strategy details.**

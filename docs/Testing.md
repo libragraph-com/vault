@@ -209,6 +209,27 @@ No Docker Compose needed for tests. Testcontainers handles PostgreSQL automatica
 - **Ephemeral:** Testcontainers creates a fresh PostgreSQL per test run. Data is discarded. No setup needed.
 - **Dev DB:** Tests hit the Docker Compose PostgreSQL (`localhost:5432`). Run `docker compose up -d` first. Data accumulates across runs — useful for verifying persistence, inspecting rows, or debugging migrations.
 
+## ObjectStorage Testing
+
+ObjectStorage tests exercise the `ObjectStorage` interface via CDI injection. The active
+implementation is determined by the `vault.object-store.type` build property.
+
+| Profile | Backend | Command |
+|---------|---------|---------|
+| test (default) | `FilesystemObjectStorage` | `./gradlew test` |
+| dev | `S3ObjectStorage` (MinIO) | `docker compose up -d && ./gradlew test -Pvault.test.profile=dev` |
+
+The same `ObjectStorageTest` class runs against both backends — the interface abstraction
+ensures consistent behavior. Tests use random tenant UUIDs and clean up after themselves.
+
+**Test coverage:**
+- Write + read round-trip (bytes and size match)
+- `exists()` returns false for missing, true after write
+- `delete()` removes blob, subsequent read throws `BlobNotFoundException`
+- `listTenants()` includes tenant after write
+- `listContainers()` returns only container BlobRefs (not leaves)
+- Tenant isolation (blob in tenant A not visible in tenant B)
+
 ## Test Logging
 
 Tests use SLF4J (not `System.out.println()`). See [Logging](Logging.md).

@@ -24,6 +24,9 @@ dependencies {
     implementation("org.jdbi:jdbi3-postgres:$jdbiVersion")
     implementation("org.jdbi:jdbi3-jackson2:$jdbiVersion")
 
+    // Reactive (Mutiny)
+    implementation("io.smallrye.reactive:mutiny")
+
     // Object storage
     implementation("io.minio:minio:$minioVersion")
 

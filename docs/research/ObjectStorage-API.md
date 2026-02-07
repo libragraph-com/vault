@@ -1,8 +1,8 @@
 # ObjectStorage API Design
 
-**Status:** Proposed (Quarkus rebuild)
+**Status:** Implemented
 **Last Updated:** 2026-02-07
-**Reference:** `vault-mvp/modules/core/.../ObjectStorage.java` (current implementation)
+**Reference:** `modules/core/src/main/java/com/libragraph/vault/core/storage/ObjectStorage.java`
 
 ## Overview
 

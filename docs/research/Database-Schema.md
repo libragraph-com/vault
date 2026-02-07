@@ -135,6 +135,26 @@ CREATE TABLE task_dependencies (
     PRIMARY KEY (blocked_task_id, blocking_task_id)
 );
 
+-- Service/resource registry for task scheduling
+CREATE TABLE resources (
+    service_id      VARCHAR(128) PRIMARY KEY,
+    status          VARCHAR(32) NOT NULL,   -- STARTING, RUNNING, STOPPING, STOPPED, FAILED
+    max_concurrency INTEGER,                -- NULL = unlimited, e.g., 2 for GPU
+    current_load    INTEGER DEFAULT 0,      -- Current active tasks using this resource
+    started_at      TIMESTAMPTZ,
+    stopped_at      TIMESTAMPTZ,
+    error_message   TEXT,
+    CHECK (status IN ('STARTING', 'RUNNING', 'STOPPING', 'STOPPED', 'FAILED'))
+);
+
+-- Task → service dependency (task blocked until service RUNNING + capacity available)
+CREATE TABLE task_resource_deps (
+    task_id         UUID REFERENCES tasks(id),
+    service_id      VARCHAR(128) REFERENCES resources(service_id),
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (task_id, service_id)
+);
+
 CREATE INDEX idx_tasks_claim ON tasks(priority DESC, created_at ASC)
     WHERE status = 'OPEN' AND claimed_by IS NULL;
 CREATE INDEX idx_tasks_tenant ON tasks(tenant_id);
@@ -144,6 +164,8 @@ CREATE INDEX idx_tasks_stale_bg ON tasks(background_timeout_at)
 CREATE INDEX idx_tasks_stale_claimed ON tasks(claimed_at)
     WHERE status = 'IN_PROGRESS';
 CREATE INDEX idx_task_deps_blocking ON task_dependencies(blocking_task_id);
+CREATE INDEX idx_task_resource_deps_service ON task_resource_deps(service_id);
+CREATE INDEX idx_resources_status ON resources(status);
 ```
 
 ## UUIDv7 Function

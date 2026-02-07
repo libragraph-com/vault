@@ -67,7 +67,32 @@ services:
       retries: 15
       start_period: 30s
 
+  ollama:
+    image: ollama/ollama
+    container_name: vault-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  ollama-init:
+    image: ollama/ollama
+    container_name: vault-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["ollama", "pull", "nomic-embed-text"]
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+
 volumes:
   postgres_data:
   minio_data:
   keycloak_data:
+  ollama_data:

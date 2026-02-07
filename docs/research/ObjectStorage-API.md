@@ -185,12 +185,7 @@ New: bucket-per-tenant for isolation, cost tracking, and access control.
 
 ## Usage Examples
 
-See implementation examples in:
-- [Filesystem Implementation](filesystem-impl.md)
-- [MinIO Implementation](minio-impl.md)
-- [BlobService Layer](blobservice-layer.md)
-
-## Pagination Pattern
+### Pagination Pattern
 
 ```java
 // List first 100 containers

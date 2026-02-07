@@ -92,13 +92,9 @@ POST /api/admin/tenants/{tenantId}/rebuild-sql
 
 For large files, support resumable uploads (tus protocol or chunked):
 
-> **OPEN QUESTION:** Which resumable upload protocol?
-> - **tus** (https://tus.io) — open protocol, well-supported
-> - **Chunked multipart** — simpler, no extra library
-> - **S3 multipart** — if uploading directly to object store
->
-> For v1, regular multipart is likely sufficient. Resumable upload is a
-> future enhancement for multi-GB files.
+> **DEFERRED:** Resumable upload protocol (tus vs chunked multipart vs S3
+> multipart). Regular multipart is sufficient for v1. Resumable upload is
+> a future enhancement for multi-GB files.
 
 ## Streaming Download
 

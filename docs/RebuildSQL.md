@@ -11,16 +11,16 @@ be fully reconstructed.
 ## Flow
 
 ```
-1. ObjectStorage.list("") → enumerate all blob keys
+1. ObjectStorage.listContainers(tenantId) + listLeaves(tenantId) → enumerate all blob keys
 2. For each blob key:
-   a. Parse filename: {hash}-{leafSize}{extension}
-   b. If extension == "_" → it's a manifest
+   a. BlobRef.parse(key) → BlobRef
+   b. If ref.isContainer() → it's a manifest
       - Read and parse Protobuf manifest
       - Insert container record
       - Insert entry records for each ManifestEntry
-      - Each entry has target_hash, target_size, storage_extension
-   c. If extension != "_" → it's a leaf
-      - Insert leaf record (hash, size, extension)
+      - Each entry has target_hash, target_size, is_container
+   c. If !ref.isContainer() → it's a leaf
+      - Insert leaf record (hash, size)
       - Optionally: re-extract metadata, re-index full text
 3. Verify referential integrity
 4. Rebuild indexes
@@ -46,9 +46,9 @@ public class RebuildSqlTask implements VaultTask<RebuildInput, RebuildResult> {
         AtomicInteger leaves = new AtomicInteger();
         AtomicInteger manifests = new AtomicInteger();
 
-        storage.list(input.tenantPrefix()).forEach(key -> {
-            BlobRef ref = BlobRef.fromStoragePath(key);
-            if (ref.isManifest()) {
+        storage.listAll(input.tenantId()).forEach(key -> {
+            BlobRef ref = BlobRef.parse(key);
+            if (ref.isContainer()) {
                 rebuildFromManifest(ref);
                 manifests.incrementAndGet();
             } else {
@@ -62,22 +62,20 @@ public class RebuildSqlTask implements VaultTask<RebuildInput, RebuildResult> {
 }
 ```
 
-> **OPEN QUESTION:** `ObjectStorage.list()` needs to work across the full
-> tenant prefix, including sharded subdirectories. For S3 this is a prefix
-> scan. For filesystem it's a recursive directory walk. The interface may
-> need a `listRecursive(prefix)` method, or `list()` is always recursive.
+> **DECISION:** `ObjectStorage.listAll(tenantId)` returns `Multi<BlobRef>` —
+> always recursive. S3 = prefix scan, filesystem = recursive walk. The driver
+> handles traversal; callers just stream results.
 
-> **OPEN QUESTION:** Should rebuild re-extract full text and metadata from
-> blobs? This is expensive but makes the index complete. Could be a
-> separate follow-up task. Minimum viable: just rebuild structural records
-> (leaves, containers, entries) from filenames and manifests.
+> **DECISION:** Rebuild is structural only (leaves, containers, entries from
+> filenames and manifests). Metadata re-extraction and FTS re-indexing are
+> a separate follow-up enrichment task — too expensive to bundle.
 
 ## ObjectStorage Requirements
 
 This workflow needs the ability to:
-1. List all keys under a prefix (`list(prefix)`)
+1. List all blobs for a tenant (`listAll(tenantId)` → `Multi<BlobRef>`)
 2. Read manifest blobs to parse their Protobuf content
-3. Parse blob filenames to extract hash, size, and extension
+3. Parse blob keys via `BlobRef.parse(key)` to extract hash, size, isContainer
 
 See [ObjectStore](ObjectStore.md) for the interface.
 

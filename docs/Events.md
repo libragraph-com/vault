@@ -72,14 +72,10 @@ childEvent.fire(event);
 childEvent.fireAsync(event);
 ```
 
-> **OPEN QUESTION:** The ingestion pipeline needs controlled concurrency
-> (e.g., max 4 concurrent container extractions). CDI async events don't
-> have built-in backpressure. Options:
-> (a) Use `@ObservesAsync` with a custom `Executor` (CDI supports this),
-> (b) Use Vert.x Event Bus with worker verticle pool,
-> (c) Combine CDI events with a `Semaphore` or `ExecutorService`.
->
-> vault-mvp used a fixed thread pool (CPU cores). Option (a) is closest.
+> **DECISION:** CDI async events with a bounded `ExecutorService` passed to
+> `fireAsync()`. CDI's `NotificationOptions.ofExecutor(executor)` controls
+> the thread pool. This gives concurrency control without leaving CDI.
+> vault-mvp used a fixed thread pool (CPU cores) — same pattern.
 
 ## Event Types
 
@@ -92,7 +88,7 @@ public record ChildDiscoveredEvent(ContainerChild child, FanInContext fanIn) {}
 public record AllChildrenCompleteEvent(FanInContext fanIn, List<ChildResult> results) {}
 public record ObjectCreatedEvent(BlobRef ref, UUID leafId) {}
 public record DedupHitEvent(BlobRef ref) {}
-public record ManifestBuiltEvent(BlobRef containerRef, BlobRef manifestRef) {}
+public record ManifestBuiltEvent(BlobRef containerRef) {}  // manifest at containerRef (isContainer=true)
 public record ContainerCompleteEvent(BlobRef containerRef, int childCount) {}
 
 // System
@@ -147,13 +143,9 @@ bus.send("ingest.file", event);
 
 See [Quarkus Event Bus](https://quarkus.io/guides/reactive-event-bus).
 
-> **OPEN QUESTION:** CDI events vs Vert.x Event Bus? CDI events are simpler
-> and type-safe. Vert.x Event Bus supports clustering and request-reply.
-> For single-process Vault, CDI events are likely sufficient. Vert.x Event
-> Bus would be needed if we split into microservices (unlikely near-term).
->
-> Recommendation: CDI events for the pipeline, Vert.x Event Bus only if
-> we need clustering later.
+> **DECISION:** CDI events for the pipeline. Type-safe, compile-time verified,
+> sufficient for single-process. Vert.x Event Bus only if we need clustering
+> later (unlikely near-term).
 
 ## Observability
 

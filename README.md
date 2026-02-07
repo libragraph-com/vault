@@ -55,15 +55,15 @@ Content-addressed storage and knowledge graph system built on Quarkus.
 
 | Component | Technology |
 |-----------|------------|
-| Framework | Quarkus |
+| Framework | Quarkus (virtual threads) |
 | Language | Java 21 |
-| Database | PostgreSQL 18 |
+| Database | PostgreSQL 18 (JDBI, Flyway) |
 | Object Storage | MinIO (local), S3 (cloud) |
 | Auth | Keycloak (OIDC) |
-| Build | Gradle |
+| Build | Gradle (multi-module) |
 | Serialization | Protobuf (manifests) |
 | Hashing | BLAKE3-128 |
-| Compression | Zstandard |
+| Compression | Zstandard (driver-level) |
 
 ## License
 

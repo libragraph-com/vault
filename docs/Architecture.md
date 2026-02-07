@@ -34,11 +34,12 @@ entirely by Quarkus config profiles — see [Platform](Platform.md).
 
 ## Module Structure
 
-> **OPEN QUESTION:** Should this be a Quarkus multi-module Gradle project (like
-> vault-mvp was), or a single module? Quarkus supports both. Multi-module adds
-> build complexity but cleanly separates concerns (core, api, cli, formats).
+> **DECISION:** Multi-module Gradle project. vault-mvp proved the module
+> boundaries are real (shared types have zero framework deps, format plugins
+> are independently testable, API is a thin layer over core). Single-module
+> would conflate these concerns and make future extraction (CLI, MCP) harder.
 
-Proposed modules (carry forward from vault-mvp):
+Modules:
 
 ```
 vault/
@@ -55,9 +56,8 @@ vault/
 
 **Dependency direction:** `shared/types` ← `formats/framework` ← `core` ← `api`, `cli`, `mcp`, `fuse`
 
-> **DEPENDENCY:** Module boundaries affect how CDI bean discovery works.
-> Quarkus uses Jandex to index beans at build time. Multi-module requires
-> each module to produce a Jandex index. See
+> **NOTE:** Multi-module requires each module to produce a Jandex index for
+> CDI bean discovery. See
 > [Quarkus CDI Reference](https://quarkus.io/guides/cdi-reference#bean_discovery).
 
 ## Data Flow Overview

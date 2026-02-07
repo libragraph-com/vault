@@ -22,7 +22,7 @@ public record BlobRef(
 
 ### Fields
 
-- **`hash`** - Content hash (BLAKE3, 256-bit)
+- **`hash`** - Content hash (BLAKE3, 128-bit / 16 bytes)
 - **`leafSize`** - Uncompressed size of the leaf data
 - **`isContainer`** - true = manifest/recipe (needs dereferencing), false = data blob
 
@@ -41,7 +41,7 @@ public record BlobRef(
 ```
 
 Where:
-- `{hash}` - Hex-encoded BLAKE3 hash (64 chars)
+- `{hash}` - Hex-encoded BLAKE3 hash (32 chars)
 - `{leafSize}` - Decimal long
 - `[_]` - Underscore suffix present if `isContainer == true`
 
@@ -140,7 +140,7 @@ This avoids reading every file to check if it's a manifest. The suffix is a **fi
 
 ## Validation Rules
 
-- **hash**: Must be valid hex string (64 chars for BLAKE3-256)
+- **hash**: Must be valid hex string (32 chars for BLAKE3-128)
 - **leafSize**: Must be > 0
 - **isContainer**: boolean (no validation needed)
 

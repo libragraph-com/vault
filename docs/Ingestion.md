@@ -89,7 +89,7 @@ public class ProcessChildHandler {
 
         if (isContainer(event.child())) {
             // Re-enter pipeline for nested container
-            BlobRef childRef = BlobRef.raw(hash, size, size);
+            BlobRef childRef = BlobRef.container(hash, size);
             ingestEvent.fire(new IngestFileEvent(childRef, event.child().path(), event.fanIn()));
         } else {
             // Store leaf
@@ -143,13 +143,13 @@ public class BuildManifestHandler {
 Protobuf binary format. See vault-mvp `manifest.proto`.
 
 - **ManifestHeader**: magic, version, format, original_hash, original_size, entry_count
-- **ManifestEntry**: path, entry_type, target_hash, target_size, storage_extension
+- **ManifestEntry**: path, entry_type, target_hash, target_size, is_container
 - **Provenance**: user, IP, timestamp, custom metadata
 
-Key design: `storage_extension` field (field 10) in each ManifestEntry contains
-all info needed to create a BlobRef during reconstruction — no database query needed.
+Key design: each ManifestEntry contains `is_container` boolean — all info needed
+to create a BlobRef during reconstruction (no database query, no extension).
 
-Manifests stored at: `{containerHash}-{containerSize}_` (underscore extension)
+Manifests stored at: `{containerHash}-{containerSize}_` (underscore = container)
 
 ## Container Fate (Reconstruction Tiers)
 

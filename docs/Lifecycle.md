@@ -86,14 +86,9 @@ public class TaskService {
 }
 ```
 
-> **OPEN QUESTION:** vault-mvp's `ManagedService` with state machine
-> (DOWN → STARTING → UP → STOPPING → DOWN) is richer than CDI lifecycle.
-> Do we need a `ManagedService` interface in Quarkus, or is
-> `@ApplicationScoped` + health checks sufficient?
->
-> Proposal: Start with plain CDI lifecycle. Add `ManagedService` wrapper
-> only if we need cascading failure propagation (service A goes down →
-> dependents also go down). Quarkus doesn't do this natively.
+> **DECISION:** Start with plain CDI lifecycle (`@PostConstruct`, `@PreDestroy`,
+> `@Startup`) + SmallRye Health checks. No custom `ManagedService` state machine.
+> Add only if we need cascading failure propagation later.
 
 ## Health Checks
 

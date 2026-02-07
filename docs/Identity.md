@@ -48,9 +48,9 @@ String orgId = jwt.getClaim("org_id");
 String tenantId = jwt.getClaim("tenant_id");
 ```
 
-> **OPEN QUESTION:** Should org_id and tenant_id be JWT claims (set by
-> Keycloak mapper) or request headers (set by gateway)? JWT claims are
-> cryptographically signed. Headers are simpler but require gateway trust.
+> **DEFERRED:** How org_id and tenant_id reach the API (JWT claims vs
+> gateway headers vs hybrid). Gateway is an optional component — this
+> needs more discussion alongside the tenant/partitioning model.
 
 ## Role Model
 

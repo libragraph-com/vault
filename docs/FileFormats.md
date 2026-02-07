@@ -92,13 +92,8 @@ public class ZipHandlerFactory implements FormatHandlerFactory {
 }
 ```
 
-> **OPEN QUESTION:** vault-mvp used Java SPI (`META-INF/services/`) for
-> plugin discovery, which works outside CDI. In Quarkus, CDI bean discovery
-> (Jandex) is preferred. But external plugins in JARs on classpath may
-> need SPI. Support both?
->
-> Quarkus can discover beans in external JARs if they have a
-> `META-INF/jandex.idx` or are listed in `quarkus.index-dependency`.
+> **DECISION:** CDI only. External plugins must include a Jandex index or
+> be registered via `quarkus.index-dependency` in config. No SPI fallback.
 
 ## Built-in Handlers
 

@@ -99,27 +99,64 @@ CREATE INDEX idx_entries_target ON entries(target_hash);
 CREATE INDEX idx_containers_parent ON containers(parent_id);
 ```
 
+## Tasks Table
+
+Background task persistence (see [Tasks](../Tasks.md)):
+
+```sql
+CREATE TABLE tasks (
+    id              UUID PRIMARY KEY,       -- UUIDv7, generated in Java
+    task_type       TEXT NOT NULL,
+    status          SMALLINT NOT NULL,      -- 0=pending, 1=running, 2=blocked, 3=complete, 4=error
+    input           JSONB NOT NULL,
+    output          JSONB,
+    parent_id       UUID,                   -- Subtask parent
+    tenant_id       UUID NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL,
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    error           TEXT,
+    FOREIGN KEY (parent_id) REFERENCES tasks(id)
+);
+
+CREATE INDEX idx_tasks_tenant ON tasks(tenant_id);
+CREATE INDEX idx_tasks_status ON tasks(status) WHERE status < 3;
+CREATE INDEX idx_tasks_parent ON tasks(parent_id);
+```
+
 ## UUIDv7 Function
 
 Database function for `DEFAULT vault_uuid_v7()`:
 
 ```sql
--- Delegates to PG 18 native uuidv7() or PL/pgSQL fallback for PG 17
+-- PostgreSQL 18+: delegates to native uuidv7()
+-- PostgreSQL 13-17: PL/pgSQL fallback using gen_random_uuid() + timestamp overlay
 CREATE OR REPLACE FUNCTION vault_uuid_v7() RETURNS uuid AS $$
 BEGIN
-    -- Try native function (PG 18+)
-    RETURN uuidv7();
-EXCEPTION
-    WHEN undefined_function THEN
-        -- Fallback for PG 17
-        RETURN (
-            SELECT uuid_generate_v7()  -- Requires pgcrypto extension
-        );
+    IF current_setting('server_version_num')::int >= 180000 THEN
+        RETURN uuidv7();
+    END IF;
+
+    -- Fallback: overlay millisecond timestamp onto random UUID
+    RETURN encode(
+        set_bit(
+            set_bit(
+                overlay(uuid_send(gen_random_uuid())
+                    placing substring(int8send(floor(extract(epoch from clock_timestamp()) * 1000)::bigint) from 3)
+                    from 1 for 6
+                ),
+                52, 1
+            ),
+            53, 1
+        ),
+        'hex')::uuid;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql VOLATILE;
 ```
 
-**Note:** Application code generates UUIDs in Java (needed for `TaskHandle.taskId()` at submit time). This function is only for `DEFAULT` values.
+**Note:** Application code generates UUIDs in Java via UuidCreator (needed for
+`TaskHandle.taskId()` at submit time). This function is only for `DEFAULT` values
+and SQL migrations.
 
 ## Example Queries
 

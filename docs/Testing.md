@@ -40,8 +40,8 @@ class BlobServiceTest {
 
     @Test
     void storeAndRetrieve() {
-        BlobRef ref = BlobRef.raw(hash, 1024, 1024);
-        blobService.store(ref, testContent());
+        BlobRef ref = BlobRef.leaf(hash, 1024);
+        blobService.store(tenantId, ref, testContent(), "application/octet-stream");
         assertThat(blobService.exists(ref)).isTrue();
     }
 }
@@ -93,18 +93,9 @@ quarkus.log.category."com.libragraph.vault".level=INFO
 
 ## Test Parameters
 
-> **OPEN QUESTION:** vault-mvp tests supported:
-> - `config` (dev|qa|...)
-> - `tenantId` (null = create new)
-> - `preserveData` (don't delete on complete)
-> - `resetTenant` (delete on init)
->
-> In Quarkus, these can be config properties or system properties.
-> Dev Services recreates containers per test run by default, so
-> `preserveData` may be less relevant. But for debugging failures,
-> keeping data around is useful.
->
-> Proposal: Use Quarkus config properties for these, with sensible defaults.
+> **DECISION:** Use Quarkus config properties with sensible defaults. Dev
+> Services recreates containers per test run, so `preserveData` is only
+> for debugging. Keep it simple.
 
 ```properties
 # Test tuning (optional)

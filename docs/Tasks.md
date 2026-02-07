@@ -19,29 +19,9 @@ States: OPEN → IN_PROGRESS → [BLOCKED] → COMPLETE | ERROR
 
 ## Quarkus Approach
 
-> **OPEN QUESTION:** This is the area with the biggest design decision.
-> vault-mvp built a full custom task framework (PostgresTaskService, TaskRunner,
-> TaskContext, subtask tracking). Options for Quarkus:
->
-> **(a) Quarkus Scheduler + custom persistence**
-> - `@Scheduled` for cron triggers
-> - Custom task table in PostgreSQL for tracking
-> - Simplest, most Quarkus-native
->
-> **(b) Quarkus + Temporal/Cadence**
-> - Durable workflow engine
-> - Built-in retry, saga, compensation
-> - Overkill? Adds infrastructure dependency
->
-> **(c) Port vault-mvp TaskService to CDI**
-> - Keep the `Task<I, O>` interface
-> - Replace custom DI/SPI with CDI beans
-> - Keep PostgreSQL-backed persistence
-> - Most continuity from vault-mvp
->
-> Recommendation: **(c)** — port the task model to CDI. The `Task<I, O>` pattern
-> worked well. Adding Temporal is premature. Quarkus Scheduler alone doesn't
-> provide subtask trees or durability.
+> **DECISION:** Port vault-mvp TaskService to CDI. The `Task<I, O>` pattern
+> worked well. Replace custom DI/SPI with CDI beans, keep PostgreSQL-backed
+> persistence. Quarkus `@Scheduled` for cron triggers. Temporal is premature.
 
 ## Task Interface (Proposed)
 

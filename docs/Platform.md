@@ -52,10 +52,10 @@ vault.object-store.bucket=vault-prod-blobs
 Quarkus CDI selects the right `@Alternative` or `@LookupIfProperty` bean
 based on profile. See [ObjectStore](ObjectStore.md).
 
-> **OPEN QUESTION:** Use `@LookupIfProperty` vs `@IfBuildProfile` vs
-> manual `Instance<ObjectStorage>` selection? `@LookupIfProperty` is most
-> flexible (runtime switchable). `@IfBuildProfile` is Quarkus-optimized
-> (dead code eliminated in native image).
+> **DECISION:** All implementations are always available; selected via
+> YAML config property (`vault.object-store.type`). CDI producer reads
+> config and returns the correct `ObjectStorage` implementation. No
+> annotation-based selection — config-driven only.
 
 ### Keycloak Realm per Profile
 
@@ -111,12 +111,12 @@ SELECT * FROM leaves WHERE tenant_id = ? AND content_hash = ?
 
 ```
 # Object store layout
-{org-id}/{tenant-id}/{hash}-{size}.zst
+{org-id}/{tenant-id}/{hash}-{leafSize}      # leaf
+{org-id}/{tenant-id}/{hash}-{leafSize}_     # container (manifest)
 ```
 
-> **OPEN QUESTION:** Should tenant_id be a path component in object store
-> keys, or should object store be completely flat with tenant embedded in
-> the key name? Path component is cleaner for S3 bucket policies.
+> **DEFERRED:** Tenant_id path structure (path component vs flat key vs
+> bucket-per-tenant) — needs more discussion with identity model.
 
 ### Sandbox
 
@@ -127,10 +127,8 @@ A filtered view of a Tenant for access control and data masking.
 - Structurally belongs to a Tenant
 - Use cases: shared workspaces, client-facing views, compliance boundaries
 
-> **OPEN QUESTION:** Sandboxes could be implemented as PostgreSQL Row-Level
-> Security policies, as application-level filtering, or as materialized views.
-> RLS is cleanest but requires careful integration with JDBI. Application-level
-> is simpler but duplicates authorization logic.
+> **DEFERRED:** Sandbox implementation (RLS vs application-level filtering vs
+> materialized views). Depends on tenant/identity model decisions.
 
 ## Tokens
 

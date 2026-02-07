@@ -8,12 +8,11 @@ PostgreSQL, Liquibase migrations, JDBI access patterns.
 |-----------|------------|-------------------|
 | Database | PostgreSQL 18 | `quarkus-jdbc-postgresql` |
 | Connection pool | Agroal | `quarkus-agroal` (included with JDBC) |
-| Migrations | Liquibase | `quarkus-liquibase` |
-| Query API | JDBI (SqlObject) | `quarkus-jdbi` or manual integration |
+| Migrations | Flyway | `quarkus-flyway` |
+| Query API | JDBI (SqlObject) | Manual wiring against Agroal |
 
-> **OPEN QUESTION:** There is a community `quarkus-jdbi` extension. Need to
-> evaluate if it's mature enough or if we wire JDBI manually against Agroal.
-> Manual wiring is simple: `Jdbi.create(agroalDataSource)`.
+> **DECISION:** Manual JDBI wiring via CDI producer: `Jdbi.create(agroalDataSource)`.
+> Simple, zero extra dependencies, full control.
 
 ## Connection Configuration
 
@@ -34,27 +33,23 @@ See [Quarkus Datasource Guide](https://quarkus.io/guides/datasource).
 
 ## Migrations
 
-Liquibase runs at startup, before the app serves requests.
+Flyway runs at startup, before the app serves requests.
 
 ```properties
-quarkus.liquibase.migrate-at-start=true
-quarkus.liquibase.change-log=db/changelog-master.xml
+quarkus.flyway.migrate-at-start=true
+quarkus.flyway.locations=db/migration
 ```
 
-```xml
-<!-- src/main/resources/db/changelog-master.xml -->
-<databaseChangeLog>
-    <include file="db/changelog/001-initial-schema.xml"/>
-    <include file="db/changelog/002-add-tenant-id.xml"/>
-</databaseChangeLog>
+Migration files are plain SQL in `src/main/resources/db/migration/`:
+
+```
+V1__initial_schema.sql
+V2__add_fts_indexes.sql
 ```
 
-See [Quarkus Liquibase Guide](https://quarkus.io/guides/liquibase).
-
-> **OPEN QUESTION:** Liquibase vs Flyway? Both have Quarkus extensions.
-> Liquibase is XML-based with rollback support. Flyway is SQL-file-based
-> and simpler. vault-mvp used neither (raw schema.sql). Flyway is simpler
-> for a SQL-first approach. Liquibase is more flexible for complex migrations.
+> **DECISION:** Flyway over Liquibase. SQL-file-based migrations are simpler
+> for a SQL-first project. No XML, no abstraction layer. See
+> [Quarkus Flyway Guide](https://quarkus.io/guides/flyway).
 
 ## Schema Design
 
@@ -120,14 +115,10 @@ public class JdbiProducer {
 }
 ```
 
-> **OPEN QUESTION:** vault-mvp wrapped all JDBC calls in `Mono.fromCallable()`
-> on `Schedulers.boundedElastic()` for async. In Quarkus, do we:
-> (a) Keep reactive with Mutiny + worker thread,
-> (b) Use imperative/blocking (Quarkus RESTEasy Reactive handles offloading), or
-> (c) Use virtual threads (`quarkus.virtual-threads.enabled=true`)?
->
-> Virtual threads are the simplest path — blocking JDBC "just works" without
-> Reactor overhead. Quarkus 3.x has first-class virtual thread support.
+> **DECISION:** Virtual threads. Blocking JDBC calls "just work" on virtual
+> threads without reactive wrappers. REST endpoints use `@RunOnVirtualThread`.
+> Quarkus 3.x has first-class virtual thread support. See
+> [Quarkus Virtual Threads Guide](https://quarkus.io/guides/virtual-threads).
 
 ## Dev Services
 

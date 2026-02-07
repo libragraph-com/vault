@@ -6,12 +6,14 @@ Protocol for rebuilding original containers from manifests and stored leaves.
 
 ```
 1. Load manifest via container BlobRef:
-   BlobRef manifestRef = BlobRef.manifest(containerHash, containerSize)
-   ManifestProto manifest = manifestManager.readManifest(manifestRef)
+   BlobRef containerRef = BlobRef.container(containerHash, containerSize)
+   ManifestProto manifest = manifestManager.readManifest(containerRef)
 
 2. For each ManifestEntry:
-   BlobRef leafRef = new BlobRef(entry.hash, entry.leafSize, entry.leafSize, entry.extension)
-   ReadableByteChannel content = blobService.retrieve(leafRef)
+   BlobRef ref = entry.isContainer
+       ? BlobRef.container(entry.hash, entry.targetSize)
+       : BlobRef.leaf(entry.hash, entry.targetSize)
+   BinaryData content = blobService.retrieve(tenantId, ref)
 
 3. Reassemble using format-specific reconstructor:
    handler.reconstruct(entries, outputStream)
@@ -21,8 +23,8 @@ Protocol for rebuilding original containers from manifests and stored leaves.
 ```
 
 **Key property:** No database query during reconstruction. Every ManifestEntry
-contains `storage_extension` — all information needed to create a BlobRef.
-Single lookup per leaf.
+contains `is_container` — all information needed to create a BlobRef.
+Single lookup per entry.
 
 ## Reconstruction Modes
 
@@ -79,13 +81,11 @@ public class ReconstructionService {
     }
 
     private ContainerChild retrieveEntry(ManifestProto.ManifestEntry entry) {
-        BlobRef ref = new BlobRef(
-            ContentHash.fromBytes(entry.getTargetHash()),
-            entry.getTargetSize(),
-            entry.getTargetSize(),  // storedSize = leafSize for lookup
-            entry.getStorageExtension()
-        );
-        ReadableByteChannel content = blobService.retrieve(ref);
+        ContentHash hash = ContentHash.fromBytes(entry.getTargetHash());
+        BlobRef ref = entry.getIsContainer()
+            ? BlobRef.container(hash, entry.getTargetSize())
+            : BlobRef.leaf(hash, entry.getTargetSize());
+        BinaryData content = blobService.retrieve(tenantId, ref);
         return new ContainerChild(entry.getPath(), content, entry.getMetadataMap());
     }
 }
@@ -103,8 +103,8 @@ Lookup is by **container hash** (what the manifest describes/creates), not
 by manifest hash. This is a key architectural decision — see [Architecture](Architecture.md).
 
 ```java
-BlobRef manifestRef = BlobRef.manifest(containerHash, containerSize);
-// manifestRef.toStoragePath() → "{containerHash}-{containerSize}_"
+BlobRef containerRef = BlobRef.container(containerHash, containerSize);
+// containerRef.toString() → "{containerHash}-{containerSize}_"
 ```
 
 ## REST Endpoint

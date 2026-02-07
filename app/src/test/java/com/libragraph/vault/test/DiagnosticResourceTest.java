@@ -1,13 +1,20 @@
-package com.libragraph.vault;
+package com.libragraph.vault.test;
 
+import com.libragraph.vault.core.db.DatabaseService;
+import com.libragraph.vault.core.service.ManagedService;
 import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
 
 @QuarkusTest
 class DiagnosticResourceTest {
+
+    @Inject
+    DatabaseService databaseService;
 
     @Test
     void ping_returnsOk() {
@@ -47,5 +54,10 @@ class DiagnosticResourceTest {
                 .then()
                 .statusCode(200)
                 .body("status", is("UP"));
+    }
+
+    @Test
+    void databaseServiceIsRunning() {
+        assertThat(databaseService.state()).isEqualTo(ManagedService.State.RUNNING);
     }
 }

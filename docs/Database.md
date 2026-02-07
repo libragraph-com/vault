@@ -1,18 +1,71 @@
 # Database
 
-PostgreSQL, Liquibase migrations, JDBI access patterns.
+PostgreSQL, Flyway migrations, JDBI access via DatabaseService.
 
 ## Stack
 
 | Component | Technology | Quarkus Extension |
 |-----------|------------|-------------------|
-| Database | PostgreSQL 18 | `quarkus-jdbc-postgresql` |
+| Database | PostgreSQL 17 | `quarkus-jdbc-postgresql` |
 | Connection pool | Agroal | `quarkus-agroal` (included with JDBC) |
 | Migrations | Flyway | `quarkus-flyway` |
 | Query API | JDBI (SqlObject) | Manual wiring against Agroal |
+| Lifecycle | DatabaseService | `AbstractManagedService` |
+
+## DatabaseService
+
+`DatabaseService` is the primary database access point. It extends `AbstractManagedService`
+and starts eagerly via `@Startup`:
+
+```java
+@ApplicationScoped
+@Startup
+public class DatabaseService extends AbstractManagedService {
+    // serviceId() → "database"
+    // doStart() → SELECT version(), stores PG version
+    // doStop() → log (Agroal manages pool shutdown)
+    // jdbi() → gated on isRunning()
+    // ping() → SELECT 1, calls fail() on error
+    // pgVersion() → version string from startup probe
+}
+```
+
+### Accessing JDBI
+
+Use `DatabaseService.jdbi()` to get the JDBI instance. This method gates on the service
+being in `RUNNING` state:
+
+```java
+@Inject DatabaseService databaseService;
+
+void doWork() {
+    Jdbi jdbi = databaseService.jdbi();
+    jdbi.useHandle(h -> h.createUpdate("INSERT INTO ...").execute());
+}
+```
+
+### JdbiProducer
+
+`JdbiProducer` remains as the CDI producer that creates the `Jdbi` instance from
+`AgroalDataSource`. DatabaseService injects this produced bean:
+
+```java
+@ApplicationScoped
+public class JdbiProducer {
+    @Produces @Singleton
+    public Jdbi jdbi(AgroalDataSource dataSource) {
+        return Jdbi.create(dataSource)
+                .installPlugin(new PostgresPlugin())
+                .installPlugin(new SqlObjectPlugin())
+                .installPlugin(new Jackson2Plugin())
+                .setSqlLogger(new Slf4JSqlLogger());
+    }
+}
+```
 
 > **DECISION:** Manual JDBI wiring via CDI producer: `Jdbi.create(agroalDataSource)`.
-> Simple, zero extra dependencies, full control.
+> Simple, zero extra dependencies, full control. DatabaseService wraps the produced
+> Jdbi with lifecycle gating.
 
 ## Connection Configuration
 
@@ -37,14 +90,13 @@ Flyway runs at startup, before the app serves requests.
 
 ```properties
 quarkus.flyway.migrate-at-start=true
-quarkus.flyway.locations=db/migration
+quarkus.flyway.locations=classpath:db/migration
 ```
 
-Migration files are plain SQL in `src/main/resources/db/migration/`:
+Migration files are plain SQL in `app/src/main/resources/db/migration/`:
 
 ```
 V1__initial_schema.sql
-V2__add_fts_indexes.sql
 ```
 
 > **DECISION:** Flyway over Liquibase. SQL-file-based migrations are simpler
@@ -66,8 +118,6 @@ object store are authoritative. See [RebuildSQL](RebuildSQL.md).
 - No storage details (compression, extensions) - that's ObjectStorage concern
 - JSONB for format-specific metadata
 - Full-text search via PostgreSQL's built-in GIN indexes
-
-> **See [research/Database-Schema.md](research/Database-Schema.md) for complete schema.**
 
 ## JDBI Access Pattern
 
@@ -92,33 +142,39 @@ public interface LeafDao {
 }
 ```
 
-### Wiring JDBI
-
-```java
-@ApplicationScoped
-public class JdbiProducer {
-
-    @Inject AgroalDataSource dataSource;
-
-    @Produces @ApplicationScoped
-    public Jdbi jdbi() {
-        Jdbi jdbi = Jdbi.create(dataSource);
-        jdbi.installPlugin(new SqlObjectPlugin());
-        jdbi.installPlugin(new PostgresPlugin());
-        return jdbi;
-    }
-
-    @Produces @ApplicationScoped
-    public LeafDao leafDao(Jdbi jdbi) {
-        return jdbi.onDemand(LeafDao.class);
-    }
-}
-```
-
 > **DECISION:** Virtual threads. Blocking JDBC calls "just work" on virtual
 > threads without reactive wrappers. REST endpoints use `@RunOnVirtualThread`.
 > Quarkus 3.x has first-class virtual thread support. See
 > [Quarkus Virtual Threads Guide](https://quarkus.io/guides/virtual-threads).
+
+## Health Check
+
+`DatabaseHealthCheck` delegates to `DatabaseService.state()` and `pgVersion()`:
+
+```java
+@Readiness
+@ApplicationScoped
+public class DatabaseHealthCheck implements HealthCheck {
+
+    @Inject DatabaseService databaseService;
+
+    @Override
+    public HealthCheckResponse call() {
+        if (databaseService.isRunning()) {
+            return HealthCheckResponse.named("database")
+                    .up()
+                    .withData("version", databaseService.pgVersion())
+                    .withData("state", databaseService.state().name())
+                    .build();
+        } else {
+            return HealthCheckResponse.named("database")
+                    .down()
+                    .withData("state", databaseService.state().name())
+                    .build();
+        }
+    }
+}
+```
 
 ## Dev Services
 

@@ -1,3 +1,7 @@
+plugins {
+    `java-library`
+}
+
 val jdbiVersion: String by project
 val minioVersion: String by project
 val commonsCodecVersion: String by project
@@ -14,7 +18,7 @@ dependencies {
     implementation("io.quarkus:quarkus-jdbc-postgresql")
     implementation("io.quarkus:quarkus-agroal")
     implementation("io.quarkus:quarkus-flyway")
-    implementation("org.jdbi:jdbi3-core:$jdbiVersion")
+    api("org.jdbi:jdbi3-core:$jdbiVersion")
     implementation("org.jdbi:jdbi3-sqlobject:$jdbiVersion")
     implementation("org.jdbi:jdbi3-postgres:$jdbiVersion")
     implementation("org.jdbi:jdbi3-jackson2:$jdbiVersion")

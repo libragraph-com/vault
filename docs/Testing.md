@@ -1,6 +1,6 @@
 # Testing
 
-Test patterns and infrastructure.
+Test patterns, infrastructure, and configuration.
 
 ## Framework
 
@@ -30,47 +30,80 @@ class ContentHashTest {
 
 ### Integration Tests (`@QuarkusTest`)
 
-Full CDI container. Quarkus Dev Services auto-provisions PostgreSQL, MinIO, etc.:
+Full CDI container. Quarkus Dev Services auto-provisions PostgreSQL:
 
 ```java
 @QuarkusTest
-class BlobServiceTest {
+class DatabaseServiceTest {
+    @Inject DatabaseService databaseService;
 
-    @Inject BlobService blobService;
+    @Test void startsInRunningState() {
+        assertThat(databaseService.state()).isEqualTo(ManagedService.State.RUNNING);
+    }
 
-    @Test
-    void storeAndRetrieve() {
-        BlobRef ref = BlobRef.leaf(hash, 1024);
-        blobService.store(tenantId, ref, testContent(), "application/octet-stream");
-        assertThat(blobService.exists(ref)).isTrue();
+    @Test void pingReturnsTrue() {
+        assertThat(databaseService.ping()).isTrue();
     }
 }
 ```
 
-No manual database setup — Quarkus starts a testcontainer automatically.
+### SQL Tests
+
+Direct database verification via `DatabaseService.jdbi()`:
+
+```java
+@QuarkusTest
+class LeafInsertTest {
+    @Inject DatabaseService databaseService;
+    @Inject VaultTestConfig testConfig;
+
+    @Test void insertLeafAndVerify() {
+        var jdbi = databaseService.jdbi();
+        byte[] hash = new byte[16];
+        new SecureRandom().nextBytes(hash);
+        // INSERT into leaves, SELECT back, assert equality
+    }
+}
+```
+
+### Service Dependency Tests
+
+`TestService` validates `@DependsOn` ordering and failure cascade:
+
+```java
+@ApplicationScoped
+@DependsOn(DatabaseService.class)
+public class TestService extends AbstractManagedService {
+    // Starts only when DatabaseService is RUNNING
+    // Cascades to FAILED when DatabaseService fails
+}
+```
+
+```java
+@QuarkusTest
+class DependencyOrderingTest {
+    @Inject DatabaseService databaseService;
+    @Inject TestService testService;
+
+    @Test void testServiceStartsAfterDatabase() {
+        assertThat(databaseService.state()).isEqualTo(State.RUNNING);
+        testService.start();
+        assertThat(testService.state()).isEqualTo(State.RUNNING);
+    }
+}
+```
 
 ### REST Tests
 
 ```java
 @QuarkusTest
-class IngestEndpointTest {
-
-    @Test
-    void testHealthReady() {
+class DiagnosticResourceTest {
+    @Test void healthReady_returnsUp() {
         given()
             .when().get("/q/health/ready")
             .then()
             .statusCode(200)
             .body("status", is("UP"));
-    }
-
-    @Test
-    void testIngestUpload() {
-        given()
-            .multiPart("file", testZipFile())
-            .when().post("/api/ingest")
-            .then()
-            .statusCode(202);
     }
 }
 ```
@@ -80,28 +113,78 @@ class IngestEndpointTest {
 Tests use the `test` profile automatically. Override in `application-test.properties`:
 
 ```properties
-# Quarkus Dev Services handles DB and object store automatically
-# Override only what's needed:
+quarkus.devservices.enabled=true
+quarkus.datasource.db-kind=postgresql
+quarkus.datasource.devservices.enabled=true
 
 vault.object-store.type=filesystem
-vault.object-store.base-path=${java.io.tmpdir}/vault-test
+vault.ollama.enabled=false
 
-# Logging
-quarkus.log.level=WARN
-quarkus.log.category."com.libragraph.vault".level=INFO
+vault.test.tenant-id=
+vault.test.reset-tenant=false
 ```
 
-## Test Parameters
+## Test Parameters via Gradle
 
-> **DECISION:** Use Quarkus config properties with sensible defaults. Dev
-> Services recreates containers per test run, so `preserveData` is only
-> for debugging. Keep it simple.
+Forward test configuration from command line via `-P` flags:
 
-```properties
-# Test tuning (optional)
-vault.test.tenant-id=                           # Empty = auto-create
-vault.test.preserve-data=false                  # Keep test data after run
-vault.test.reset-tenant=false                   # Wipe tenant on init
+```bash
+# Default: ephemeral DB via Testcontainers, auto-generated tenant
+./gradlew test
+
+# Run against Docker Compose dev DB (data persists across runs)
+docker compose up -d
+./gradlew test -Pvault.test.profile=dev
+
+# Use specific tenant ID
+./gradlew test -Pvault.test.tenantId=abc-123
+
+# Reset tenant data before test run (dev DB only — ephemeral DB is always fresh)
+./gradlew test -Pvault.test.profile=dev -Pvault.test.resetTenant=true
+```
+
+### How profile override works
+
+`-Pvault.test.profile=dev` sets `quarkus.test.profile`, which tells Quarkus to
+activate the `dev` profile **instead of** the `test` profile. The `dev` profile disables
+DevServices and points at `jdbc:postgresql://localhost:5432/vault` (Docker Compose),
+so tests hit the persistent database instead of a throwaway Testcontainer.
+
+Property forwarding is configured in `app/build.gradle.kts` (must be after the `io.quarkus`
+plugin to avoid the plugin overriding settings). Gradle `-P` flags are mapped to
+kebab-case JVM system properties for Quarkus SmallRye Config:
+
+```kotlin
+// app/build.gradle.kts
+tasks.withType<Test> {
+    val propMappings = mapOf(
+        "vault.test.tenantId"     to "vault.test.tenant-id",
+        "vault.test.resetTenant"  to "vault.test.reset-tenant",
+        "vault.test.profile"      to "quarkus.test.profile",
+    )
+    propMappings.forEach { (gradleProp, sysProp) ->
+        val value = project.findProperty(gradleProp) as String?
+        inputs.property(gradleProp, value ?: "")  // Gradle re-runs when flags change
+        if (value != null) systemProperty(sysProp, value)
+    }
+}
+```
+
+> **Note:** Property forwarding MUST live in `app/build.gradle.kts`, not the root
+> `build.gradle.kts`. The Quarkus Gradle plugin overrides `Test` task configuration
+> set by the root `subprojects` block. Gradle's `systemProperty()` only reaches the
+> test JVM when configured after the plugin.
+
+### VaultTestConfig
+
+CDI bean that reads test configuration:
+
+```java
+@ApplicationScoped
+public class VaultTestConfig {
+    // tenantId() → configured UUID or auto-generated
+    // resetTenant() → boolean, default false
+}
 ```
 
 ## Dev Services
@@ -111,10 +194,20 @@ Quarkus auto-provisions external dependencies for dev and test:
 | Service | Extension | Auto-provisioned |
 |---------|-----------|-----------------|
 | PostgreSQL | `quarkus-jdbc-postgresql` | Yes (testcontainer) |
-| MinIO/S3 | `quarkus-amazon-s3` | Yes (localstack) |
+| MinIO/S3 | Manual (MinioClientProducer) | Via Docker Compose |
 | Keycloak | `quarkus-oidc` | Yes (keycloak container) |
 
-No Docker Compose needed for tests. See [Quarkus Dev Services](https://quarkus.io/guides/dev-services).
+No Docker Compose needed for tests. Testcontainers handles PostgreSQL automatically.
+
+### Ephemeral vs Dev DB
+
+| Mode | Command | Database | Data persists |
+|------|---------|----------|---------------|
+| Ephemeral (default) | `./gradlew test` | Testcontainers (auto) | No |
+| Dev DB | `./gradlew test -Pvault.test.profile=dev` | Docker Compose PG | Yes |
+
+- **Ephemeral:** Testcontainers creates a fresh PostgreSQL per test run. Data is discarded. No setup needed.
+- **Dev DB:** Tests hit the Docker Compose PostgreSQL (`localhost:5432`). Run `docker compose up -d` first. Data accumulates across runs — useful for verifying persistence, inspecting rows, or debugging migrations.
 
 ## Test Logging
 

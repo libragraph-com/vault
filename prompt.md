@@ -29,6 +29,8 @@ docs but some implementation details were superceded in ../vault-mvp. We will
 need to clarify/correct this repo as most reeliable source. vault-mvp will go
 away and pm/ will be updated.
 
+read and improve:
+
 README.md
  - Brief overview
  - Docs index
@@ -37,73 +39,7 @@ CLAUDE.md
  - refer to README.md
  - development process (tbd)
 
-dos/Platform.md
- - Quarkus background
- - Profiles (dev,qa,prod,...). Each profile is 
-	 - Configs
-
-docs/Architecture.md
-
-Quarkus
- - Config
-	 - DI config (ArC)
-   - SmallRye Config
-
- - Logging
- - Event Bus
- - DI
- - Liecycle Events: 
-   - @Startup and @Shutdown @ApplicationScoped
-	 - Core Services
-	 - service cnfig
-
-Logging:
- - SLF4J -> JBoss Log Manger
- - Quarkus Log
-
-Extensions
- - Liquibase
- - Postgres
- - JDBI
-
-DevServices
- - Postgres
- - Object Store
- - Keycloak
- - Databases
-
-Testing
- - profiles
- - no mocking -- alt configs
-
-NFRs:
-
-Tenancy.md
-Logging.md
-Events.md
-Configuration.md
-Lifecycle.md
-DevServices.md
-Database.md
-ObjectStore.md
-REST.md
-Identity.md
-Testing.md
-DataTypes.md
-Deployment.md
-Extensions.md
-Scheduler.md
-Events.md
-FileFormats.md
-Tasks.md
-Extensions.md
- - FileFormats
- - Tasks
- - Events
- - Services
-
-features/
-Ingestion.md
-Reconstruction.md
-RebuildSQL.md
+docs/*.md
+ - suggestions/steering on content
+ - anything else from vault-mvp with review+upates as needed
 

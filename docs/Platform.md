@@ -1,63 +1,143 @@
+# Platform
+
+Configuration, multi-tenancy, and partitioning.
+
 ## App Configuration
 
-Sets up process/application to allow the same code to talk to different external
-systems and tune params/choices for each.
+Quarkus uses [SmallRye Config](https://quarkus.io/guides/config-reference) with profile support.
 
-sample configuration:
-  /opt/myapp/
-    ├── myapp.jar
-        ├── application.properties        # Base config
-    └── config/
-        ├── application-dev.properties    # Dev overrides
-        ├── application-qa.properties     # QA overrides
-        └── application-prod.properties   # Prod overrides
+```
+/opt/vault/
+  ├── vault-runner.jar
+  └── config/
+      ├── application.properties         # Base config
+      ├── application-dev.properties     # Dev overrides
+      ├── application-qa.properties      # QA overrides
+      └── application-prod.properties    # Prod overrides
+```
 
-  cd /opt/myapp
-  java -Dquarkus.profile=qa -jar myapp.jar
+Run with profile:
+```bash
+java -Dquarkus.profile=qa -jar vault-runner.jar
+```
 
-  Quarkus automatically checks ./config/ directory (relative to where you run the JAR) and applies the profile file.
+Or specify custom config location:
+```bash
+java -Dquarkus.config.locations=/etc/vault/config \
+     -Dquarkus.profile=prod \
+     -jar vault-runner.jar
+```
 
-  Or specify custom location:
+Environment variables override properties (standard Quarkus behavior):
+```bash
+export QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://prod-db:5432/vault
+```
 
-  java -Dquarkus.config.locations=/etc/myapp/config \
-       -Dquarkus.profile=qa \
-       -jar myapp.jar
+See [Quarkus Configuration Guide](https://quarkus.io/guides/config).
 
-Env overrides (dev plus deployed)
+### Pluggable Implementations
 
-Any pluggable implementations to ArC are set up in config profile:
-objectstore.impl=FileSystemObjectStore
+Object storage backend is selected via config:
 
-Each profile specifies a KeyCloak Realm
+```properties
+# application-dev.properties
+vault.object-store.type=filesystem
+vault.object-store.base-path=/tmp/vault-blobs
 
-## Users/Identiies
-Users are defined in a global namspace (allowing SaaS/global identities) but
-are tracked locally in a KeyCloak service that does user Auth upstream of the
-application. 
+# application-prod.properties
+vault.object-store.type=s3
+vault.object-store.bucket=vault-prod-blobs
+```
 
-### Org
-KeyCloak has Users, Groups, Roles. Orgs don't define/create Users (which come from Keycloak)
-but they store which users have Roles inside a given org. 
+Quarkus CDI selects the right `@Alternative` or `@LookupIfProperty` bean
+based on profile. See [ObjectStore](ObjectStore.md).
 
-## Tokens
-Users can create tokens that allow limited access on their behalf.
-Tokens can be scope to speciic regions (org, tenant, share).
+> **OPEN QUESTION:** Use `@LookupIfProperty` vs `@IfBuildProfile` vs
+> manual `Instance<ObjectStorage>` selection? `@LookupIfProperty` is most
+> flexible (runtime switchable). `@IfBuildProfile` is Quarkus-optimized
+> (dead code eliminated in native image).
 
-JWTs are sent to services and serves as the security principal for the request.
+### Keycloak Realm per Profile
+
+Each config profile specifies its Keycloak realm:
+
+```properties
+# application-dev.properties
+quarkus.oidc.auth-server-url=http://localhost:8180/realms/vault-dev
+
+# application-prod.properties
+quarkus.oidc.auth-server-url=https://auth.libragraph.com/realms/vault-prod
+```
+
+## Users / Identity
+
+Users are defined in a global namespace (enabling SaaS / federated identities)
+and authenticated via Keycloak upstream of the application.
+
+- No local accounts (no saved passwords in Vault)
+- Keycloak handles all authentication (OIDC)
+- Vault receives a JWT and trusts it
+
+See [Identity](Identity.md) for full auth details.
 
 ## Partitioning
-Inside a given process/application there are Organizations, Tenants, and
-f Sandboxes
+
+Inside a running Vault instance, data is partitioned hierarchically:
+
+```
+Organization
+  └── Tenant(s)
+        └── Sandbox(es)
+```
+
+### Organization
+
+A Keycloak concept. Users, Groups, and Roles are defined in Keycloak.
+Vault doesn't create users — it stores which users have which Roles
+within a given Organization.
 
 ### Tenant
-A single org has 1 or more Tenants. A Tenant is a data partition and set of 
-roles that give users permission inside the tenant. Data records structurrally
-live inside a tenant which structurally belongs to an org. This is represented
-as columns in SQL and folders in side Object Store.
+
+A data partition within an Organization. A single org has 1+ Tenants.
+
+- All data records structurally belong to a Tenant
+- Tenant is represented as a column in SQL and a folder prefix in Object Store
+- Each Tenant has its own role assignments (read, write, admin)
+
+```sql
+-- Every data table includes tenant scoping
+SELECT * FROM leaves WHERE tenant_id = ? AND content_hash = ?
+```
+
+```
+# Object store layout
+{org-id}/{tenant-id}/{hash}-{size}.zst
+```
+
+> **OPEN QUESTION:** Should tenant_id be a path component in object store
+> keys, or should object store be completely flat with tenant embedded in
+> the key name? Path component is cleaner for S3 bucket policies.
 
 ### Sandbox
-A sandbox is a filtered view of Tenant. It has a list of files/features available to
-it to implement access controls, data masking, etc. Sandboxes structurally
-belong to tenants and can have rules that expand to/cover any of the data in the
-tenant (saearch predicates).
 
+A filtered view of a Tenant for access control and data masking.
+
+- Has a list of files/features visible to it
+- Rules can expand to cover any data in the parent tenant (search predicates)
+- Structurally belongs to a Tenant
+- Use cases: shared workspaces, client-facing views, compliance boundaries
+
+> **OPEN QUESTION:** Sandboxes could be implemented as PostgreSQL Row-Level
+> Security policies, as application-level filtering, or as materialized views.
+> RLS is cleanest but requires careful integration with JDBI. Application-level
+> is simpler but duplicates authorization logic.
+
+## Tokens
+
+Users can create scoped tokens for limited access on their behalf.
+
+- Tokens scoped to specific regions (org, tenant, sandbox)
+- Represented as JWTs
+- Served as the security principal for REST requests
+
+See [Identity](Identity.md) and [REST](REST.md).

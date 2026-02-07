@@ -1,32 +1,130 @@
-Tests should all allow for:
- - config (dev|qa|...)
- - tenantId (null means create new tenant)
- - preserveData (don't delete on complete; default false)
- - resetTenant (delete on init; default false. Only used when tenantId provided)
+# Testing
 
-In memory tests use conventional boot / DI. Don't fight the system; configure it
+Test patterns and infrastructure.
 
-External tests (REST/etc) wait for process to be ready
+## Framework
+
+- **JUnit 5** (Jupiter) — test runner
+- **`@QuarkusTest`** — full CDI container with dev services
+- **`@QuarkusIntegrationTest`** — tests against packaged app (JAR or native)
+- **AssertJ** — fluent assertions
+- **RestAssured** — HTTP endpoint testing
+
+## Test Categories
+
+### Unit Tests (no container)
+
+Plain JUnit 5. Used for shared types, format framework, pure logic:
+
+```java
+class ContentHashTest {
+    @Test
+    void hashEquality() {
+        byte[] bytes = new byte[]{1, 2, 3};
+        ContentHash a = ContentHash.of(bytes);
+        ContentHash b = ContentHash.of(bytes);
+        assertThat(a).isEqualTo(b);
+    }
+}
 ```
-  @QuarkusTest
-  public class StartupTest {
 
-      @Test
-      public void testStartupCompletes() {
-          // If test runs, startup succeeded (wasn't blocked)
-          assertTrue(true);
-      }
+### Integration Tests (`@QuarkusTest`)
 
-      @Test
-      public void testServiceReady() {
-          // Check readiness
-          given()
-              .when().get("/q/health/ready")
-              .then()
-              .statusCode(200)
-              .body("status", is("UP"));
-      }
-  }
+Full CDI container. Quarkus Dev Services auto-provisions PostgreSQL, MinIO, etc.:
+
+```java
+@QuarkusTest
+class BlobServiceTest {
+
+    @Inject BlobService blobService;
+
+    @Test
+    void storeAndRetrieve() {
+        BlobRef ref = BlobRef.raw(hash, 1024, 1024);
+        blobService.store(ref, testContent());
+        assertThat(blobService.exists(ref)).isTrue();
+    }
+}
 ```
 
-Tests use SLF4J logger (no System.out.println)
+No manual database setup — Quarkus starts a testcontainer automatically.
+
+### REST Tests
+
+```java
+@QuarkusTest
+class IngestEndpointTest {
+
+    @Test
+    void testHealthReady() {
+        given()
+            .when().get("/q/health/ready")
+            .then()
+            .statusCode(200)
+            .body("status", is("UP"));
+    }
+
+    @Test
+    void testIngestUpload() {
+        given()
+            .multiPart("file", testZipFile())
+            .when().post("/api/ingest")
+            .then()
+            .statusCode(202);
+    }
+}
+```
+
+## Test Configuration
+
+Tests use the `test` profile automatically. Override in `application-test.properties`:
+
+```properties
+# Quarkus Dev Services handles DB and object store automatically
+# Override only what's needed:
+
+vault.object-store.type=filesystem
+vault.object-store.base-path=${java.io.tmpdir}/vault-test
+
+# Logging
+quarkus.log.level=WARN
+quarkus.log.category."com.libragraph.vault".level=INFO
+```
+
+## Test Parameters
+
+> **OPEN QUESTION:** vault-mvp tests supported:
+> - `config` (dev|qa|...)
+> - `tenantId` (null = create new)
+> - `preserveData` (don't delete on complete)
+> - `resetTenant` (delete on init)
+>
+> In Quarkus, these can be config properties or system properties.
+> Dev Services recreates containers per test run by default, so
+> `preserveData` may be less relevant. But for debugging failures,
+> keeping data around is useful.
+>
+> Proposal: Use Quarkus config properties for these, with sensible defaults.
+
+```properties
+# Test tuning (optional)
+vault.test.tenant-id=                           # Empty = auto-create
+vault.test.preserve-data=false                  # Keep test data after run
+vault.test.reset-tenant=false                   # Wipe tenant on init
+```
+
+## Dev Services
+
+Quarkus auto-provisions external dependencies for dev and test:
+
+| Service | Extension | Auto-provisioned |
+|---------|-----------|-----------------|
+| PostgreSQL | `quarkus-jdbc-postgresql` | Yes (testcontainer) |
+| MinIO/S3 | `quarkus-amazon-s3` | Yes (localstack) |
+| Keycloak | `quarkus-oidc` | Yes (keycloak container) |
+
+No Docker Compose needed for tests. See [Quarkus Dev Services](https://quarkus.io/guides/dev-services).
+
+## Test Logging
+
+Tests use SLF4J (not `System.out.println()`). See [Logging](Logging.md).

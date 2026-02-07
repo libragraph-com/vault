@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package com.libragraph.vault.formats.zip;
+
+option java_package = "com.libragraph.vault.formats.proto";
+option java_outer_classname = "ZipMetadataProto";
+
+/**
+ * Format-specific metadata for ZIP entries.
+ * Captures all data needed for bit-identical reconstruction.
+ */
+message ZipEntryMetadata {
+  // Compression method (STORED=0, DEFLATED=8, etc.)
+  int32 method = 1;
+
+  // CRC-32 checksum
+  int64 crc32 = 2;
+
+  // Uncompressed size
+  int64 uncompressed_size = 3;
+
+  // Compressed size in original ZIP
+  int64 compressed_size = 4;
+
+  // Timestamps (milliseconds since epoch)
+  int64 last_modified_time = 5;
+  int64 creation_time = 6;
+  int64 last_access_time = 7;
+
+  // Entry comment (optional)
+  string comment = 8;
+
+  // Extra field data (critical for bit-identical reconstruction)
+  bytes extra_field = 9;
+
+  // External file attributes (platform-specific)
+  int64 external_file_attributes = 10;
+
+  // Internal file attributes
+  int32 internal_file_attributes = 11;
+
+  // General purpose bit flags (includes data descriptor flag)
+  // Bit 3: If set, CRC and sizes are in data descriptor after compressed data
+  int32 general_purpose_bit = 12;
+}
+
+/**
+ * Container-level ZIP metadata (global ZIP properties).
+ */
+message ZipContainerMetadata {
+  // Global ZIP comment (optional)
+  string comment = 1;
+
+  // ZIP file format version
+  int32 version_made_by = 2;
+  int32 version_needed = 3;
+}

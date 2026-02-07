@@ -57,8 +57,10 @@ public class FormatRegistry {
     @Inject Instance<FormatHandlerFactory> factories;
 
     public Optional<Handler> findHandler(BinaryData buffer, FileContext context) {
+        byte[] header = buffer.readHeader(512);
+        String mimeType = context.detectedMimeType().orElse(null);
         return StreamSupport.stream(factories.spliterator(), false)
-            .filter(f -> f.getDetectionCriteria().matches(buffer, context))
+            .filter(f -> f.getDetectionCriteria().matches(mimeType, context.filename(), header))
             .max(Comparator.comparingInt(f -> f.getDetectionCriteria().priority()))
             .map(f -> f.createInstance(buffer, context));
     }
@@ -111,14 +113,17 @@ public class ZipHandlerFactory implements FormatHandlerFactory {
 
 ### BinaryData
 
-Abstraction over content bytes — can be RAM, mmap, or disk-backed:
+Abstract class in `com.libragraph.vault.util.buffer` (`shared/utils` module).
+Implements `SeekableByteChannel` for direct channel-based access:
 
 ```java
-public interface BinaryData {
-    InputStream openStream();
-    long size();
-    byte[] readHeader(int bytes);
-    void release();
+public abstract class BinaryData implements SeekableByteChannel {
+    public abstract ContentHash hash();   // BLAKE3-128, may be lazy
+    public abstract long size();
+    public InputStream inputStream(long pos);
+    public byte[] readHeader(int maxBytes);
+
+    public static BinaryData wrap(SeekableByteChannel channel);
 }
 ```
 

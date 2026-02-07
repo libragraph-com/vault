@@ -11,7 +11,7 @@ ObjectStorage is the abstraction for blob persistence. This document proposes ch
 **New requirements:**
 - Explicit tenant isolation (tenantId parameter)
 - Reactive streaming for list operations (not `List<>`)
-- Uses existing `BinaryData` type from vault-mvp
+- Uses `BinaryData` from `shared/utils`
 
 ## Core Interface
 
@@ -87,7 +87,7 @@ Callers can:
 
 ### 3. BinaryData Abstraction
 
-**Uses existing vault-mvp `BinaryData` type:**
+**Uses `BinaryData` from `shared/utils` (`com.libragraph.vault.util.buffer`):**
 
 ```java
 public abstract class BinaryData implements SeekableByteChannel {
@@ -99,7 +99,7 @@ public abstract class BinaryData implements SeekableByteChannel {
 ```
 
 Benefits:
-- Already exists in vault-mvp
+- Lives in `shared/utils` (no framework dependencies)
 - Seekable channel interface (not just streams)
 - Hash and size always available
 - Header reading for format detection

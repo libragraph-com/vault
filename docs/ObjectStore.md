@@ -100,7 +100,7 @@ public abstract class BinaryData implements SeekableByteChannel {
 
 Callers always work with uncompressed data. ObjectStorage driver handles compression transparently.
 
-See `vault-mvp/formats/framework/.../BinaryData.java`
+See `shared/utils/src/main/java/com/libragraph/vault/util/buffer/BinaryData.java`
 
 ## Implementations
 

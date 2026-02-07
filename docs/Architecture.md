@@ -43,10 +43,11 @@ Modules:
 
 ```
 vault/
-├── shared/types/         # BlobRef, ContentHash, enums — no framework deps
-├── formats/framework/    # FormatHandlerFactory, Handler, DetectionCriteria
+├── shared/types/         # BlobRef, enums — no framework deps
+├── shared/utils/         # ContentHash, BinaryData, Buffer — no framework deps
 ├── modules/
 │   ├── core/             # Ingestion, reconstruction, blob storage, events
+│   ├── formats/          # FormatHandlerFactory, Handler, DetectionCriteria, codecs, Tika
 │   ├── api/              # REST endpoints (RESTEasy)
 │   ├── cli/              # CLI (quarkus-picocli)
 │   ├── mcp/              # MCP server (AI integration)
@@ -54,7 +55,7 @@ vault/
 └── app/                  # Quarkus application entry point
 ```
 
-**Dependency direction:** `shared/types` ← `formats/framework` ← `core` ← `api`, `cli`, `mcp`, `fuse`
+**Dependency direction:** `shared/types` ← `shared/utils` ← `modules/formats` ← `core` ← `api`, `cli`, `mcp`, `fuse`
 
 > **NOTE:** Multi-module requires each module to produce a Jandex index for
 > CDI bean discovery. See

@@ -4,7 +4,9 @@ plugins {
 
 dependencies {
     implementation(project(":shared:types"))
+    implementation(project(":shared:utils"))
     implementation(project(":modules:core"))
+    implementation(project(":modules:formats"))
     implementation(project(":modules:api"))
 
     // Test

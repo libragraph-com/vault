@@ -9,6 +9,7 @@ val protobufVersion: String by project
 
 dependencies {
     implementation(project(":shared:types"))
+    implementation(project(":shared:utils"))
 
     // Quarkus CDI + config
     implementation("io.quarkus:quarkus-arc")

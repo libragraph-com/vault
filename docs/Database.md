@@ -108,37 +108,66 @@ V1__initial_schema.sql
 Database is an **index**, not source of truth. Blobs and manifests in
 object store are authoritative. See [RebuildSQL](RebuildSQL.md).
 
+The canonical schema is defined in [`docs/research/RevisedSchema.sql`](research/RevisedSchema.sql).
+
 **Core tables:**
-- `leaves` - Content-addressed leaf nodes (deduplicated data)
-- `containers` - Original container files (ZIPs, PSTs, etc.)
-- `entries` - Files/directories within containers
+- `blob_ref` — Global content-addressed blob registry (spans tenants, deduplication boundary)
+- `blob` — Per-tenant blob ownership (same `blob_ref` in two tenants = two rows)
+- `container` — Blobs that have extractable children
+- `entry` — Files/directories within containers
+
+**Lookup tables:**
+- `task_status` — Task state enum (`OPEN`, `IN_PROGRESS`, `BLOCKED`, etc.)
+- `entry_type` — Container entry kinds (`file`, `directory`, `symlink`)
+- `format_handler` — Registered format handlers (upserted at startup)
 
 **Key principles:**
-- UUIDv7 for all surrogate keys (time-ordered, k-sortable)
-- No storage details (compression, extensions) - that's ObjectStorage concern
+- SERIAL/BIGSERIAL for surrogate keys on ephemeral/internal data (better join performance, smaller indexes)
+- UUIDs only for external identity (`organization.global_id`, `tenant.global_id`)
+- Lookup tables instead of ENUMs or VARCHAR CHECK constraints (extensible, FK-enforced)
+- No storage details (compression, extensions) — that is an ObjectStorage concern
 - JSONB for format-specific metadata
 - Full-text search via PostgreSQL's built-in GIN indexes
 
 ## JDBI Access Pattern
 
-JDBI SqlObject for declarative SQL mapping:
+JDBI SqlObject DAOs provide declarative SQL mapping. Each DAO interface is
+attached via `jdbi.onDemand(Dao.class)` or `handle.attach(Dao.class)`:
 
 ```java
-public interface LeafDao {
+public interface BlobRefDao {
 
-    @SqlQuery("SELECT * FROM leaves WHERE content_hash = :hash AND tenant_id = :tenantId")
-    @RegisterBeanMapper(Leaf.class)
-    Optional<Leaf> findByHash(@Bind("hash") byte[] hash, @Bind("tenantId") UUID tenantId);
+    @SqlQuery("SELECT * FROM blob_ref WHERE content_hash = :hash AND leaf_size = :leafSize AND container = :container")
+    @RegisterBeanMapper(BlobRefRecord.class)
+    Optional<BlobRefRecord> find(@Bind("hash") byte[] hash,
+                                  @Bind("leafSize") long leafSize,
+                                  @Bind("container") boolean container);
 
-    @SqlQuery("SELECT EXISTS(SELECT 1 FROM leaves WHERE content_hash = :hash)")
-    boolean exists(@Bind("hash") byte[] hash);
+    @SqlQuery("SELECT EXISTS(SELECT 1 FROM blob_ref WHERE content_hash = :hash AND leaf_size = :leafSize AND container = :container)")
+    boolean exists(@Bind("hash") byte[] hash,
+                   @Bind("leafSize") long leafSize,
+                   @Bind("container") boolean container);
 
     @SqlUpdate("""
-        INSERT INTO leaves (content_hash, size_bytes, mime_type, tenant_id)
-        VALUES (:hash, :sizeBytes, :mimeType, :tenantId)
-        ON CONFLICT (content_hash) DO NOTHING
+        INSERT INTO blob_ref (content_hash, leaf_size, container, mime_type, handler)
+        VALUES (:contentHash, :leafSize, :container, :mimeType, :handler)
+        ON CONFLICT (content_hash, leaf_size, container) DO NOTHING
+        RETURNING id
         """)
-    void insert(@BindBean LeafRecord record);
+    @GetGeneratedKeys
+    long insert(@BindBean BlobRefRecord record);
+}
+```
+
+```java
+public interface TaskDao {
+
+    @SqlQuery("SELECT * FROM task WHERE id = :id")
+    @RegisterBeanMapper(TaskRecord.class)
+    Optional<TaskRecord> findById(@Bind("id") int id);
+
+    @SqlUpdate("UPDATE task SET status = :status, completed_at = now() WHERE id = :id")
+    void updateStatus(@Bind("id") int id, @Bind("status") short status);
 }
 ```
 

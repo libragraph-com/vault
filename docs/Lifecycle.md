@@ -17,7 +17,7 @@ Vault services with managed lifecycle extend `AbstractManagedService`, which pro
 enum State { STOPPED, STARTING, RUNNING, STOPPING, FAILED }
 ```
 
-Matches the `resources` table CHECK constraint in V1 migration.
+Used for in-memory health tracking via `ServiceStateChangedEvent`.
 
 ### ManagedService Interface
 
@@ -101,6 +101,27 @@ circular bean creation during CDI event delivery at startup.
 > **DECISION:** ManagedService framework with CDI events. Plain CDI lifecycle
 > (`@PostConstruct`, `@Startup`) handles bean initialization, while `AbstractManagedService`
 > adds state tracking, dependency validation, and failure cascade on top.
+
+### Task Resource Registration
+
+Services register as `task_resource` rows on boot. Each row is static configuration
+declaring the service name and its maximum concurrency (or `NULL` for unlimited).
+The `task_resource` table is used by the task system for throttling — task claims
+check resource availability and concurrency limits before acquiring work.
+
+Registration happens at startup and is idempotent (upsert by name). The schema
+for `task_resource` is defined in [`docs/research/RevisedSchema.sql`](research/RevisedSchema.sql).
+
+### ResourceAvailabilityTracker
+
+`ResourceAvailabilityTracker` observes `ServiceStateChangedEvent` and maintains an
+in-memory `Set<String>` of currently available (i.e., `RUNNING`) service names.
+When the task system's claim query runs, it passes this set to filter out tasks
+that depend on resources whose services are not currently available. This avoids
+claiming work that would immediately fail due to a down dependency.
+
+`ServiceStateChangedEvent` remains the sole mechanism for in-memory health tracking;
+there is no database table tracking runtime service state or current load.
 
 ## Quarkus Lifecycle Mapping
 

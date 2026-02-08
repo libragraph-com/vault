@@ -13,6 +13,7 @@ dependencies {
     testImplementation("io.rest-assured:rest-assured")
     testImplementation("io.quarkus:quarkus-jdbc-postgresql-deployment")
     testImplementation("org.testcontainers:minio:1.20.4")
+    testImplementation("io.quarkus:quarkus-scheduler-deployment")
 }
 
 // Forward vault.test.* project properties to the Quarkus test JVM.

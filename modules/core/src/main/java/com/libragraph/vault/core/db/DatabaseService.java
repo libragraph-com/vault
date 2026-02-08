@@ -1,5 +1,6 @@
 package com.libragraph.vault.core.db;
 
+import com.libragraph.vault.core.dao.DatabaseDao;
 import com.libragraph.vault.core.service.AbstractManagedService;
 import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
@@ -29,8 +30,7 @@ public class DatabaseService extends AbstractManagedService {
 
     @Override
     protected void doStart() {
-        pgVersion = jdbi.withHandle(h ->
-                h.createQuery("SELECT version()").mapTo(String.class).one());
+        pgVersion = jdbi.withExtension(DatabaseDao.class, DatabaseDao::pgVersion);
         log.infof("Connected to: %s", pgVersion);
     }
 
@@ -51,7 +51,7 @@ public class DatabaseService extends AbstractManagedService {
     /** Executes SELECT 1 to verify connectivity. Calls {@link #fail} on error. */
     public boolean ping() {
         try {
-            jdbi.withHandle(h -> h.createQuery("SELECT 1").mapTo(Integer.class).one());
+            jdbi.withExtension(DatabaseDao.class, DatabaseDao::ping);
             return true;
         } catch (Exception e) {
             fail(e);

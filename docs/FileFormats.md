@@ -67,6 +67,15 @@ public class FormatRegistry {
 }
 ```
 
+### Database Registration
+
+On startup, `FormatRegistry` scans all CDI-discovered `FormatHandlerFactory` beans
+and upserts each one into the `format_handler` lookup table (keyed by handler name).
+This is a startup-time-only operation — handler registration does not occur at
+request time. The `blob_ref.handler` column is a FK referencing `format_handler(id)`,
+linking each blob to the handler that knows how to process it. See
+[`docs/research/RevisedSchema.sql`](research/RevisedSchema.sql) for the table definition.
+
 ## Plugin Discovery
 
 ### In Quarkus (CDI)

@@ -33,6 +33,9 @@ dependencies {
     // Health checks
     implementation("io.quarkus:quarkus-smallrye-health")
 
+    // Scheduling (StaleTaskRecovery)
+    implementation("io.quarkus:quarkus-scheduler")
+
     // Content hashing + serialization (ready for future use)
     implementation("commons-codec:commons-codec:$commonsCodecVersion") // includes BLAKE3
     implementation("com.google.protobuf:protobuf-java:$protobufVersion")

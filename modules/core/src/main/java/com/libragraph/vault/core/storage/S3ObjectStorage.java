@@ -199,6 +199,11 @@ public class S3ObjectStorage implements ObjectStorage {
                     }
                 }
                 return containers.stream();
+            } catch (ErrorResponseException e) {
+                if ("NoSuchBucket".equals(e.errorResponse().code())) {
+                    return java.util.stream.Stream.<BlobRef>empty();
+                }
+                throw new StorageException("Failed to list containers for tenant: " + tenantId, e);
             } catch (Exception e) {
                 throw new StorageException("Failed to list containers for tenant: " + tenantId, e);
             }

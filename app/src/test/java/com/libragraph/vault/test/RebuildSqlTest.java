@@ -10,7 +10,7 @@ import com.libragraph.vault.core.dao.EntryDao;
 import com.libragraph.vault.core.dao.EntryRecord;
 import com.libragraph.vault.core.event.ChildResult;
 import com.libragraph.vault.core.ingest.ManifestManager;
-import com.libragraph.vault.core.rebuild.RebuildSqlTask;
+import com.libragraph.vault.core.rebuild.RebuildTenantSqlTask;
 import com.libragraph.vault.core.storage.ObjectStorage;
 import com.libragraph.vault.core.storage.TenantStorageResolver;
 import com.libragraph.vault.core.task.TaskContext;
@@ -52,7 +52,7 @@ class RebuildSqlTest {
     ManifestManager manifestManager;
 
     @Inject
-    RebuildSqlTask rebuildSqlTask;
+    RebuildTenantSqlTask rebuildSqlTask;
 
     @Inject
     VaultTestConfig testConfig;
@@ -181,7 +181,7 @@ class RebuildSqlTest {
      */
     private record StubTaskContext(int tenantId) implements TaskContext {
         @Override public int taskId() { return -1; }
-        @Override public String taskType() { return "rebuild.sql"; }
+        @Override public String taskType() { return "rebuild.tenant-sql"; }
         @Override public int createSubtask(Class<? extends VaultTask> c, Object i) { throw new UnsupportedOperationException(); }
         @Override public int createSubtask(Class<? extends VaultTask> c, Object i, int p) { throw new UnsupportedOperationException(); }
         @Override public <O> O getSubtaskResult(int id, Class<O> t) { throw new UnsupportedOperationException(); }

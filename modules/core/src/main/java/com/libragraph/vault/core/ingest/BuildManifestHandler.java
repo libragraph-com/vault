@@ -7,19 +7,23 @@ import com.libragraph.vault.core.dao.EntryDao;
 import com.libragraph.vault.core.event.AllChildrenCompleteEvent;
 import com.libragraph.vault.core.event.ChildResult;
 import com.libragraph.vault.core.event.FanInContext;
+import com.libragraph.vault.core.task.TaskError;
 import com.libragraph.vault.core.task.TaskService;
 import com.libragraph.vault.util.BlobRef;
 import com.libragraph.vault.util.buffer.BinaryData;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
-import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.event.NotificationOptions;
+import jakarta.enterprise.event.ObservesAsync;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import org.jdbi.v3.core.Jdbi;
 import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 /**
  * Observes AllChildrenCompleteEvent: builds and stores manifest, inserts
@@ -45,72 +49,82 @@ public class BuildManifestHandler {
     @Inject
     Event<AllChildrenCompleteEvent> allChildrenCompleteEvent;
 
-    void onAllChildrenComplete(@Observes AllChildrenCompleteEvent event) {
-        FanInContext fanIn = event.fanIn();
-        List<ChildResult> results = event.results();
+    @Inject
+    @Named("eventExecutor")
+    ExecutorService executor;
 
-        BlobRef containerRef = fanIn.containerRef();
-        String tenantId = fanIn.tenantId();
-        int dbTenantId = fanIn.dbTenantId();
+    void onAllChildrenComplete(@ObservesAsync AllChildrenCompleteEvent event) {
+        try {
+            FanInContext fanIn = event.fanIn();
+            List<ChildResult> results = event.results();
 
-        log.debugf("Building manifest for container %s (%d children)",
-                containerRef, results.size());
+            BlobRef containerRef = fanIn.containerRef();
+            String tenantId = fanIn.tenantId();
+            int dbTenantId = fanIn.dbTenantId();
 
-        // 1. Build manifest proto
-        String formatKey = detectFormatKey(fanIn.containerPath());
-        BinaryData manifestData = manifestManager.build(containerRef, formatKey, null, results);
+            log.debugf("Building manifest for container %s (%d children)",
+                    containerRef, results.size());
 
-        // 2. Store manifest and create blob_ref + blob rows for the container
-        BlobInserter.InsertResult containerInsert = blobInserter.insertContainer(
-                tenantId, dbTenantId, manifestData, containerRef);
+            // 1. Build manifest proto
+            String formatKey = detectFormatKey(fanIn.containerPath());
+            BinaryData manifestData = manifestManager.build(containerRef, formatKey, null, results);
 
-        // 3. Insert container and entry rows
-        jdbi.useHandle(h -> {
-            ContainerDao containerDao = h.attach(ContainerDao.class);
-            containerDao.insert(containerInsert.blobId(), results.size());
+            // 2. Store manifest and create blob_ref + blob rows for the container
+            BlobInserter.InsertResult containerInsert = blobInserter.insertContainer(
+                    tenantId, dbTenantId, manifestData, containerRef);
 
-            BlobRefDao blobRefDao = h.attach(BlobRefDao.class);
-            BlobDao blobDao = h.attach(BlobDao.class);
+            // 3. Insert container and entry rows
+            jdbi.useHandle(h -> {
+                ContainerDao containerDao = h.attach(ContainerDao.class);
+                containerDao.insert(containerInsert.blobId(), results.size());
 
-            List<EntryDao.EntryRow> entryRows = new ArrayList<>();
-            for (ChildResult child : results) {
-                long childBlobRefId = blobRefDao.findOrInsert(child.ref(), null);
-                long childBlobId = blobDao.findOrInsert(dbTenantId, childBlobRefId);
+                BlobRefDao blobRefDao = h.attach(BlobRefDao.class);
+                BlobDao blobDao = h.attach(BlobDao.class);
 
-                entryRows.add(new EntryDao.EntryRow(
-                        childBlobId,
-                        containerInsert.blobId(),
-                        child.entryType(),
-                        child.internalPath(),
-                        child.mtime(),
-                        null // metadata JSON
+                List<EntryDao.EntryRow> entryRows = new ArrayList<>();
+                for (ChildResult child : results) {
+                    long childBlobRefId = blobRefDao.findOrInsert(child.ref(), null);
+                    long childBlobId = blobDao.findOrInsert(dbTenantId, childBlobRefId);
+
+                    entryRows.add(new EntryDao.EntryRow(
+                            childBlobId,
+                            containerInsert.blobId(),
+                            child.entryType(),
+                            child.internalPath(),
+                            child.mtime(),
+                            null // metadata JSON
+                    ));
+                }
+
+                EntryDao entryDao = h.attach(EntryDao.class);
+                entryDao.batchInsert(h, entryRows);
+            });
+
+            // 4. Cascade to parent FanInContext
+            FanInContext parent = fanIn.parent();
+            if (parent != null) {
+                short entryType = fanIn.containerPath().endsWith("/") ? (short) 1 : (short) 0;
+                ChildResult containerResult = new ChildResult(
+                        containerRef, fanIn.containerPath(), true,
+                        entryType, null, null);
+                parent.addResult(containerResult);
+                if (parent.decrementAndCheck()) {
+                    allChildrenCompleteEvent.fireAsync(
+                            new AllChildrenCompleteEvent(parent, parent.results()),
+                            NotificationOptions.ofExecutor(executor));
+                }
+            } else {
+                // Root container — task is complete
+                log.infof("Ingestion complete for task %d, container %s",
+                        fanIn.taskId(), containerRef);
+                taskService.complete(fanIn.taskId(), Map.of(
+                        "containerRef", containerRef.toString(),
+                        "entryCount", results.size()
                 ));
             }
-
-            EntryDao entryDao = h.attach(EntryDao.class);
-            entryDao.batchInsert(h, entryRows);
-        });
-
-        // 4. Cascade to parent FanInContext
-        FanInContext parent = fanIn.parent();
-        if (parent != null) {
-            short entryType = fanIn.containerPath().endsWith("/") ? (short) 1 : (short) 0;
-            ChildResult containerResult = new ChildResult(
-                    containerRef, fanIn.containerPath(), true,
-                    entryType, null, null);
-            parent.addResult(containerResult);
-            if (parent.decrementAndCheck()) {
-                allChildrenCompleteEvent.fire(
-                        new AllChildrenCompleteEvent(parent, parent.results()));
-            }
-        } else {
-            // Root container — task is complete
-            log.infof("Ingestion complete for task %d, container %s",
-                    fanIn.taskId(), containerRef);
-            taskService.complete(fanIn.taskId(), Map.of(
-                    "containerRef", containerRef.toString(),
-                    "entryCount", results.size()
-            ));
+        } catch (Exception e) {
+            log.errorf(e, "Failed in pipeline (task %d)", event.fanIn().taskId());
+            taskService.fail(event.fanIn().taskId(), TaskError.from(e));
         }
     }
 

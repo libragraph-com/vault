@@ -11,11 +11,14 @@ import com.libragraph.vault.util.BlobRef;
 import com.libragraph.vault.util.buffer.BinaryData;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
+import jakarta.enterprise.event.NotificationOptions;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import org.jboss.logging.Logger;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 /**
  * Task that initiates ingestion of a container from ObjectStorage.
@@ -39,6 +42,10 @@ public class IngestContainerTask implements VaultTask {
     @Inject
     Event<IngestFileEvent> ingestFileEvent;
 
+    @Inject
+    @Named("eventExecutor")
+    ExecutorService executor;
+
     @Override
     public String taskType() {
         return "ingest.container";
@@ -57,10 +64,11 @@ public class IngestContainerTask implements VaultTask {
         log.infof("Ingesting container: key=%s tenant=%s taskId=%d",
                 storageKey, tenantId, ctx.taskId());
 
-        // Fire IngestFileEvent to start the pipeline
-        ingestFileEvent.fire(new IngestFileEvent(
+        // Fire IngestFileEvent to start the pipeline (async for concurrent processing)
+        ingestFileEvent.fireAsync(new IngestFileEvent(
                 ctx.taskId(), tenantId, ctx.tenantId(),
-                rootData, storageKey, null));
+                rootData, storageKey, null),
+                NotificationOptions.ofExecutor(executor));
 
         return TaskOutcome.background("Ingesting container", Duration.ofHours(1));
     }

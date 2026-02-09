@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -67,7 +68,7 @@ class IngestDedupTest {
         long countBefore = countBlobRefsForHash(sharedHash);
 
         int taskId = taskRunner.ingest(zipData, "archive.zip", storageTenantId, dbTenantId);
-        assertThat(taskRunner.getTask(taskId).status()).isEqualTo(TaskStatus.COMPLETE);
+        assertThat(taskRunner.awaitTask(taskId, Duration.ofSeconds(30)).status()).isEqualTo(TaskStatus.COMPLETE);
 
         // Count blob_refs for the shared hash after ingest
         long countAfter = countBlobRefsForHash(sharedHash);
@@ -92,7 +93,7 @@ class IngestDedupTest {
         ContentHash hash2 = new RamBuffer(unique2.getBytes(StandardCharsets.UTF_8), null).hash();
 
         int taskId = taskRunner.ingest(zipData, "archive.zip", storageTenantId, dbTenantId);
-        assertThat(taskRunner.getTask(taskId).status()).isEqualTo(TaskStatus.COMPLETE);
+        assertThat(taskRunner.awaitTask(taskId, Duration.ofSeconds(30)).status()).isEqualTo(TaskStatus.COMPLETE);
 
         // Each unique file should have its own blob_ref
         assertThat(countBlobRefsForHash(hash1)).isEqualTo(1);

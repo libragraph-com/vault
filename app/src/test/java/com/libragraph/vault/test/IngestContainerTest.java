@@ -22,6 +22,7 @@ import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -72,9 +73,9 @@ class IngestContainerTest {
         int taskId = taskRunner.ingest(zipData, "archive.zip", storageTenantId, dbTenantId);
 
         // Verify task completed
-        TaskRecord task = taskRunner.getTask(taskId);
+        TaskRecord task = taskRunner.awaitTask(taskId, Duration.ofSeconds(30));
         assertThat(task.status())
-                .as("Task should be COMPLETE after synchronous ingestion")
+                .as("Task should be COMPLETE after ingestion")
                 .isEqualTo(TaskStatus.COMPLETE);
 
         // Verify container blob_ref exists
@@ -154,7 +155,7 @@ class IngestContainerTest {
 
         int taskId = taskRunner.ingest(zipData, "archive.zip", storageTenantId, dbTenantId);
 
-        TaskRecord task = taskRunner.getTask(taskId);
+        TaskRecord task = taskRunner.awaitTask(taskId, Duration.ofSeconds(30));
         assertThat(task.status()).isEqualTo(TaskStatus.COMPLETE);
 
         // Find the container blob_id for querying entries

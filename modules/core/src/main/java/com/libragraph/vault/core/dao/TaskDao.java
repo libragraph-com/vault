@@ -42,10 +42,11 @@ public interface TaskDao {
     List<TaskRecord> findByStatus(@Bind("status") TaskStatus status);
 
     @SqlUpdate("UPDATE task SET status = :status, output = CAST(:output AS jsonb), " +
-            "completed_at = now() WHERE id = :id")
+            "completed_at = now() WHERE id = :id AND status NOT IN (4, 5, 6, 7)")
     void complete(@Bind("id") int id, @Bind("status") TaskStatus status, @Bind("output") String output);
 
-    @SqlUpdate("UPDATE task SET status = :status, expires_at = :expiresAt WHERE id = :id")
+    @SqlUpdate("UPDATE task SET status = :status, expires_at = :expiresAt " +
+            "WHERE id = :id AND status NOT IN (4, 5, 6, 7)")
     void setBackground(@Bind("id") int id, @Bind("status") TaskStatus status,
                        @Bind("expiresAt") Instant expiresAt);
 
@@ -54,7 +55,7 @@ public interface TaskDao {
     void returnToOpen(@Bind("id") int id, @Bind("status") TaskStatus status);
 
     @SqlUpdate("UPDATE task SET status = :status, output = CAST(:errorJson AS jsonb), " +
-            "retryable = :retryable, completed_at = now() WHERE id = :id")
+            "retryable = :retryable, completed_at = now() WHERE id = :id AND status NOT IN (4, 5, 6, 7)")
     void failTerminal(@Bind("id") int id,
                       @Bind("status") TaskStatus status,
                       @Bind("errorJson") String errorJson,

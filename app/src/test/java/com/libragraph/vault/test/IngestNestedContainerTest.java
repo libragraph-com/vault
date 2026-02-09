@@ -21,6 +21,7 @@ import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -74,7 +75,7 @@ class IngestNestedContainerTest {
         // Ingest — data passed directly, never stored as raw ZIP
         int taskId = taskRunner.ingest(outerData, "outer.zip", storageTenantId, dbTenantId);
 
-        TaskRecord task = taskRunner.getTask(taskId);
+        TaskRecord task = taskRunner.awaitTask(taskId, Duration.ofSeconds(30));
         assertThat(task.status()).isEqualTo(TaskStatus.COMPLETE);
 
         // Verify outer container exists

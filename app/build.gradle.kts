@@ -30,6 +30,7 @@ tasks.withType<Test> {
     // SmallRye Config, overriding any profile properties.
     systemProperty("vault.tasks.worker-count", "0")
     systemProperty("quarkus.scheduler.enabled", "false")
+    systemProperty("vault.object-store.write-once-check", "true")
 
     val propMappings = mapOf(
         "vault.test.tenantId"     to "vault.test.tenant-id",

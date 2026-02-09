@@ -43,6 +43,9 @@ public class S3ObjectStorage implements ObjectStorage {
     @ConfigProperty(name = "vault.object-store.bucket-prefix", defaultValue = "vault-")
     String bucketPrefix;
 
+    @ConfigProperty(name = "vault.object-store.write-once-check", defaultValue = "false")
+    boolean writeOnceCheck;
+
     private String bucketName(String tenantId) {
         return bucketPrefix + tenantId;
     }
@@ -52,6 +55,12 @@ public class S3ObjectStorage implements ObjectStorage {
             if (!minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
                 minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
             }
+        } catch (ErrorResponseException e) {
+            // Concurrent creation — another thread already created the bucket
+            if ("BucketAlreadyOwnedByYou".equals(e.errorResponse().code())) {
+                return;
+            }
+            throw new StorageException("Failed to ensure bucket: " + bucket, e);
         } catch (Exception e) {
             throw new StorageException("Failed to ensure bucket: " + bucket, e);
         }
@@ -84,6 +93,23 @@ public class S3ObjectStorage implements ObjectStorage {
             String bucket = bucketName(tenantId);
             ensureBucket(bucket);
             String key = ref.toString();
+            if (writeOnceCheck) {
+                try {
+                    minioClient.statObject(StatObjectArgs.builder()
+                            .bucket(bucket).object(key).build());
+                    throw new BlobAlreadyExistsException(tenantId, ref);
+                } catch (BlobAlreadyExistsException e) {
+                    throw e;
+                } catch (ErrorResponseException e) {
+                    String code = e.errorResponse().code();
+                    if (!"NoSuchKey".equals(code) && !"NoSuchBucket".equals(code)) {
+                        throw new StorageException("Failed to check existence: " + ref, e);
+                    }
+                    // Good — does not exist, proceed
+                } catch (Exception e) {
+                    throw new StorageException("Failed to check existence: " + ref, e);
+                }
+            }
             try (InputStream is = data.inputStream(0)) {
                 minioClient.putObject(PutObjectArgs.builder()
                         .bucket(bucket)

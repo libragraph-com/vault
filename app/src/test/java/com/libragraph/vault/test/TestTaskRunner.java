@@ -9,18 +9,22 @@ import com.libragraph.vault.util.BlobRef;
 import com.libragraph.vault.util.buffer.BinaryData;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
+import jakarta.enterprise.event.NotificationOptions;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 /**
- * Test helper that drives the ingestion pipeline synchronously.
+ * Test helper that drives the ingestion pipeline via async CDI events.
  *
  * <p>Accepts data directly — the raw file is never stored in ObjectStorage.
  * Only the ingestion pipeline stores blobs (leaves + manifests).
  *
- * <p>CDI events are synchronous, so the entire pipeline runs inline
- * and BuildManifestHandler calls taskService.complete() at the end.
+ * <p>CDI events are async — use {@link #awaitTask} to poll for completion.
  */
 @ApplicationScoped
 public class TestTaskRunner {
@@ -31,8 +35,12 @@ public class TestTaskRunner {
     @Inject
     Event<IngestFileEvent> ingestFileEvent;
 
+    @Inject
+    @Named("eventExecutor")
+    ExecutorService executor;
+
     /**
-     * Runs the full ingestion pipeline synchronously with in-memory data.
+     * Runs the full ingestion pipeline with in-memory data.
      *
      * @param data       the raw file data (e.g. ZIP bytes)
      * @param filename   the original filename (used for format detection, e.g. "archive.zip")
@@ -48,11 +56,35 @@ public class TestTaskRunner {
                 Map.of("storageKey", rootRef.toString()), dbTenantId, 999);
 
         // Fire the event with the data directly — no ObjectStorage round-trip
-        ingestFileEvent.fire(new IngestFileEvent(
+        ingestFileEvent.fireAsync(new IngestFileEvent(
                 taskId, tenantId, dbTenantId,
-                data, filename, null));
+                data, filename, null),
+                NotificationOptions.ofExecutor(executor));
 
         return taskId;
+    }
+
+    /**
+     * Polls until a task reaches a terminal state or the timeout expires.
+     */
+    public TaskRecord awaitTask(int taskId, Duration timeout) {
+        Instant deadline = Instant.now().plus(timeout);
+        while (Instant.now().isBefore(deadline)) {
+            TaskRecord record = taskService.get(taskId).orElseThrow(
+                    () -> new IllegalStateException("Task not found: " + taskId));
+            if (record.status() == TaskStatus.COMPLETE
+                    || record.status() == TaskStatus.ERROR
+                    || record.status() == TaskStatus.DEAD) {
+                return record;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            }
+        }
+        throw new AssertionError("Task " + taskId + " did not complete within " + timeout);
     }
 
     /**

@@ -16,6 +16,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -62,7 +63,7 @@ class ReconstructContainerTest {
 
         // Ingest — data passed directly, never stored as raw ZIP
         int taskId = taskRunner.ingest(originalZip, "archive.zip", storageTenantId, dbTenantId);
-        assertThat(taskRunner.getTask(taskId).status()).isEqualTo(TaskStatus.COMPLETE);
+        assertThat(taskRunner.awaitTask(taskId, Duration.ofSeconds(30)).status()).isEqualTo(TaskStatus.COMPLETE);
 
         // Reconstruct
         BinaryData reconstructed = reconstructionService.reconstruct(storageTenantId, containerRef);
@@ -84,7 +85,7 @@ class ReconstructContainerTest {
         BlobRef containerRef = BlobRef.container(zipData.hash(), zipData.size());
 
         int taskId = taskRunner.ingest(zipData, "archive.zip", storageTenantId, dbTenantId);
-        assertThat(taskRunner.getTask(taskId).status()).isEqualTo(TaskStatus.COMPLETE);
+        assertThat(taskRunner.awaitTask(taskId, Duration.ofSeconds(30)).status()).isEqualTo(TaskStatus.COMPLETE);
 
         // Reconstruct twice
         BinaryData first = reconstructionService.reconstruct(storageTenantId, containerRef);

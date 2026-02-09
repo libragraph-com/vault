@@ -2,6 +2,7 @@ package com.libragraph.vault.core.ingest;
 
 import com.libragraph.vault.core.dao.BlobDao;
 import com.libragraph.vault.core.dao.BlobRefDao;
+import com.libragraph.vault.core.storage.BlobAlreadyExistsException;
 import com.libragraph.vault.core.storage.BlobService;
 import com.libragraph.vault.util.BlobRef;
 import com.libragraph.vault.util.buffer.BinaryData;
@@ -45,7 +46,12 @@ public class BlobInserter {
 
         if (dedup.blobRefId() == 0) {
             // New blob_ref — store to ObjectStorage and insert both rows
-            blobService.create(tenantId, ref, buffer, mimeType).await().indefinitely();
+            try {
+                blobService.create(tenantId, ref, buffer, mimeType).await().indefinitely();
+            } catch (BlobAlreadyExistsException e) {
+                // Concurrent insert — blob already stored, proceed with DB rows
+                log.debugf("Concurrent dedup in storage: ref=%s", ref);
+            }
             long[] ids = jdbi.withHandle(h -> {
                 BlobRefDao refDao = h.attach(BlobRefDao.class);
                 long blobRefId = refDao.findOrInsert(ref, mimeType);
@@ -81,8 +87,12 @@ public class BlobInserter {
 
         if (dedup.blobRefId() == 0) {
             // New — store manifest and insert both rows
-            blobService.create(tenantId, containerRef, manifestData, "application/x-protobuf")
-                    .await().indefinitely();
+            try {
+                blobService.create(tenantId, containerRef, manifestData, "application/x-protobuf")
+                        .await().indefinitely();
+            } catch (BlobAlreadyExistsException e) {
+                log.debugf("Concurrent dedup in storage: ref=%s", containerRef);
+            }
             long[] ids = jdbi.withHandle(h -> {
                 BlobRefDao refDao = h.attach(BlobRefDao.class);
                 long blobRefId = refDao.findOrInsert(containerRef, "application/x-protobuf");

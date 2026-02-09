@@ -101,7 +101,7 @@ Gateway connectivity is optional, enabled via config:
 ```properties
 # Enable Gateway client (outbound WebSocket to Gateway service)
 vault.gateway.enabled=true
-vault.gateway.endpoint=wss://gateway.libragraph.io
+vault.gateway.endpoint=wss://gateway.libragraph.com
 vault.gateway.instance-id=${INSTANCE_ID}
 vault.gateway.api-key=${GATEWAY_API_KEY}
 ```

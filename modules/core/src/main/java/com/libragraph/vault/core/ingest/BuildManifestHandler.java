@@ -1,5 +1,6 @@
 package com.libragraph.vault.core.ingest;
 
+import com.libragraph.vault.core.dao.BlobContentDao;
 import com.libragraph.vault.core.dao.BlobDao;
 import com.libragraph.vault.core.dao.BlobRefDao;
 import com.libragraph.vault.core.dao.ContainerDao;
@@ -11,6 +12,7 @@ import com.libragraph.vault.core.task.TaskError;
 import com.libragraph.vault.core.task.TaskService;
 import com.libragraph.vault.util.BlobRef;
 import com.libragraph.vault.util.buffer.BinaryData;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
 import jakarta.enterprise.event.NotificationOptions;
@@ -53,6 +55,9 @@ public class BuildManifestHandler {
     @Named("eventExecutor")
     ExecutorService executor;
 
+    @Inject
+    ObjectMapper objectMapper;
+
     void onAllChildrenComplete(@ObservesAsync AllChildrenCompleteEvent event) {
         try {
             FanInContext fanIn = event.fanIn();
@@ -81,20 +86,40 @@ public class BuildManifestHandler {
 
                 BlobRefDao blobRefDao = h.attach(BlobRefDao.class);
                 BlobDao blobDao = h.attach(BlobDao.class);
+                BlobContentDao contentDao = h.attach(BlobContentDao.class);
 
                 List<EntryDao.EntryRow> entryRows = new ArrayList<>();
                 for (ChildResult child : results) {
                     long childBlobRefId = blobRefDao.findOrInsert(child.ref(), null);
                     long childBlobId = blobDao.findOrInsert(dbTenantId, childBlobRefId);
 
+                    // Serialize entry metadata to JSON
+                    String entryMetaJson = null;
+                    if (child.entryMetadata() != null) {
+                        try {
+                            entryMetaJson = objectMapper.writeValueAsString(child.entryMetadata());
+                        } catch (Exception e) {
+                            log.warnf(e, "Failed to serialize entry metadata for %s", child.internalPath());
+                        }
+                    }
+
                     entryRows.add(new EntryDao.EntryRow(
                             childBlobId,
                             containerInsert.blobId(),
                             child.entryType(),
                             child.internalPath(),
-                            child.mtime(),
-                            null // metadata JSON
+                            entryMetaJson
                     ));
+
+                    // Write doc metadata to blob_content
+                    if (child.docMetadata() != null && !child.docMetadata().isEmpty()) {
+                        try {
+                            String docMetaJson = objectMapper.writeValueAsString(child.docMetadata());
+                            contentDao.upsertMetadata(childBlobId, docMetaJson);
+                        } catch (Exception e) {
+                            log.warnf(e, "Failed to write doc metadata for %s", child.internalPath());
+                        }
+                    }
                 }
 
                 EntryDao entryDao = h.attach(EntryDao.class);
@@ -107,7 +132,7 @@ public class BuildManifestHandler {
                 short entryType = fanIn.containerPath().endsWith("/") ? (short) 1 : (short) 0;
                 ChildResult containerResult = new ChildResult(
                         containerRef, fanIn.containerPath(), true,
-                        entryType, null, null);
+                        entryType, null, null, null);
                 parent.addResult(containerResult);
                 if (parent.decrementAndCheck()) {
                     allChildrenCompleteEvent.fireAsync(

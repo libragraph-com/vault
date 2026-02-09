@@ -10,6 +10,11 @@ import java.util.Map;
 public record ContainerChild(
         String path,
         BinaryData buffer,
-        Map<String, Object> metadata
+        Map<String, Object> metadata,
+        EntryMetadata entryMetadata
 ) {
+    /** Backward-compat constructor (entryMetadata = null). */
+    public ContainerChild(String path, BinaryData buffer, Map<String, Object> metadata) {
+        this(path, buffer, metadata, null);
+    }
 }

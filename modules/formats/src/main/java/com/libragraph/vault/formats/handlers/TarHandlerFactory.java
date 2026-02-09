@@ -89,11 +89,13 @@ public class TarHandlerFactory implements FormatHandlerFactory {
                     }
 
                     Map<String, Object> metadata = extractEntryMetadata(entry);
+                    EntryMetadata entryMeta = buildEntryMetadata(entry);
 
                     children.add(new ContainerChild(
                         entry.getName(),
                         childBuffer,
-                        metadata
+                        metadata,
+                        entryMeta
                     ));
                 }
 
@@ -141,6 +143,23 @@ public class TarHandlerFactory implements FormatHandlerFactory {
         @Override
         public void close() {
             // Buffer is managed externally
+        }
+
+        private static EntryMetadata buildEntryMetadata(TarArchiveEntry entry) {
+            Instant mtime = entry.getModTime() != null
+                    ? Instant.ofEpochMilli(entry.getModTime().getTime()) : null;
+            String linkTarget = (entry.isSymbolicLink() || entry.isLink())
+                    ? entry.getLinkName() : null;
+
+            return new EntryMetadata(
+                    mtime, null, null,
+                    entry.getMode(),
+                    entry.getLongUserId(),
+                    entry.getLongGroupId(),
+                    entry.getUserName(),
+                    entry.getGroupName(),
+                    linkTarget
+            );
         }
 
         private Map<String, Object> extractEntryMetadata(TarArchiveEntry entry) {

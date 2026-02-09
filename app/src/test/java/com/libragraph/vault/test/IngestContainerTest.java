@@ -112,6 +112,14 @@ class IngestContainerTest {
         List<String> paths = entries.stream().map(EntryRecord::internalPath).sorted().toList();
         assertThat(paths).containsExactly("data.csv", "hello.txt");
 
+        // Verify entry.metadata JSONB is populated with EntryMetadata fields
+        for (EntryRecord entry : entries) {
+            assertThat(entry.metadata())
+                    .as("Entry metadata JSONB should be populated for: " + entry.internalPath())
+                    .isNotNull()
+                    .contains("mtime");
+        }
+
         // Verify each leaf has blob_ref + blob rows
         for (EntryRecord entry : entries) {
             Optional<BlobRecord> leafBlob = jdbi.withHandle(h -> {
@@ -131,6 +139,20 @@ class IngestContainerTest {
                     .as("Leaf blob_ref should exist for entry: " + entry.internalPath())
                     .isPresent();
             assertThat(leafRefRecord.get().container()).isFalse();
+        }
+
+        // Verify doc metadata is populated in blob_content for leaf blobs
+        for (EntryRecord entry : entries) {
+            String docMeta = jdbi.withHandle(h ->
+                    h.createQuery("SELECT metadata FROM blob_content WHERE blob_id = :blobId")
+                            .bind("blobId", entry.blobId())
+                            .mapTo(String.class)
+                            .findOne()
+                            .orElse(null));
+            // Text files should have doc metadata (format, size)
+            assertThat(docMeta)
+                    .as("Doc metadata should be populated for leaf: " + entry.internalPath())
+                    .isNotNull();
         }
 
         // Verify manifest stored in ObjectStorage at container BlobRef key

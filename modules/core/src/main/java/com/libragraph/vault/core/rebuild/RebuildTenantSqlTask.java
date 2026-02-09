@@ -19,7 +19,6 @@ import jakarta.inject.Inject;
 import org.jdbi.v3.core.Jdbi;
 import org.jboss.logging.Logger;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -156,14 +155,10 @@ public class RebuildTenantSqlTask implements VaultTask {
                     return blobDao.findOrInsert(tenantId, blobRefId);
                 });
 
-                Instant mtime = entry.getMtime() > 0
-                        ? Instant.ofEpochMilli(entry.getMtime())
-                        : null;
-
                 entryRows.add(new EntryDao.EntryRow(
                         childBlobId, containerBlobId,
                         (short) entry.getEntryType(),
-                        entry.getPath(), mtime, null));
+                        entry.getPath(), null));
                 totalEntries++;
             }
 

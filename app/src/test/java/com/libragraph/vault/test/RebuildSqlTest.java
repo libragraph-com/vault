@@ -93,8 +93,8 @@ class RebuildSqlTest {
 
         // Build and store manifest directly — no ingestion pipeline
         List<ChildResult> children = List.of(
-                new ChildResult(refA, "rebuild-a.txt", false, (short) 0, null, null),
-                new ChildResult(refB, "rebuild-b.txt", false, (short) 0, null, null));
+                new ChildResult(refA, "rebuild-a.txt", false, (short) 0, null, null, null),
+                new ChildResult(refB, "rebuild-b.txt", false, (short) 0, null, null, null));
         BinaryData manifestData = manifestManager.build(containerRef, "zip", 1, null, children);
         manifestManager.store(storageTenantId, containerRef, manifestData);
 

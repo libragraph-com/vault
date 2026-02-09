@@ -22,6 +22,7 @@ dependencies {
 
     // Serialization
     implementation("com.google.protobuf:protobuf-java:$protobufVersion")
+    implementation("com.fasterxml.jackson.core:jackson-annotations")
 }
 
 protobuf {

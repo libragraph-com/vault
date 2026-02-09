@@ -1,9 +1,10 @@
 package com.libragraph.vault.core.event;
 
+import com.libragraph.vault.formats.api.EntryMetadata;
 import com.libragraph.vault.util.BlobRef;
 import com.libragraph.vault.util.buffer.BinaryData;
 
-import java.time.Instant;
+import java.util.Map;
 
 public record ChildResult(
         BlobRef ref,
@@ -11,5 +12,6 @@ public record ChildResult(
         boolean isContainer,
         short entryType,
         BinaryData formatMetadata,
-        Instant mtime
+        EntryMetadata entryMetadata,
+        Map<String, Object> docMetadata
 ) {}

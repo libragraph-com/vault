@@ -10,6 +10,7 @@ import com.libragraph.vault.core.task.TaskError;
 import com.libragraph.vault.core.task.TaskService;
 import com.libragraph.vault.formats.api.ContainerCapabilities;
 import com.libragraph.vault.formats.api.ContainerChild;
+import com.libragraph.vault.formats.api.EntryMetadata;
 import com.libragraph.vault.formats.api.FileContext;
 import com.libragraph.vault.formats.api.Handler;
 import com.libragraph.vault.formats.registry.FormatRegistry;
@@ -24,7 +25,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import org.jboss.logging.Logger;
 
-import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
@@ -68,14 +68,15 @@ public class ProcessChildHandler {
             // Determine entry type from path
             short entryType = child.path().endsWith("/") ? (short) 1 : (short) 0;
 
+            EntryMetadata entryMeta = child.entryMetadata();
+
             // Skip empty directories — just report as result
             if (entryType == 1 && buffer.size() == 0) {
                 BlobRef dirRef = BlobRef.leaf(buffer.hash(), 1); // directories need size > 0
                 BinaryData formatMeta = extractFormatMetadata(child.metadata());
-                Instant mtime = extractMtime(child.metadata());
 
                 ChildResult result = new ChildResult(dirRef, child.path(), false,
-                        entryType, formatMeta, mtime);
+                        entryType, formatMeta, entryMeta, null);
                 fanIn.addResult(result);
                 if (fanIn.decrementAndCheck()) {
                     allChildrenCompleteEvent.fireAsync(
@@ -103,7 +104,6 @@ public class ProcessChildHandler {
             }
 
             BinaryData formatMeta = extractFormatMetadata(child.metadata());
-            Instant mtime = extractMtime(child.metadata());
 
             if (isTier2) {
                 // TIER_2: store original as leaf, report leaf to parent, bonus-ingest
@@ -113,7 +113,7 @@ public class ProcessChildHandler {
 
                 // Report LEAF to parent FanIn (parent manifest references the leaf, not container)
                 ChildResult result = new ChildResult(leafRef, child.path(), false,
-                        entryType, formatMeta, mtime);
+                        entryType, formatMeta, entryMeta, null);
                 fanIn.addResult(result);
                 if (fanIn.decrementAndCheck()) {
                     allChildrenCompleteEvent.fireAsync(
@@ -141,8 +141,14 @@ public class ProcessChildHandler {
                         buffer, child.path(), fanIn),
                         NotificationOptions.ofExecutor(executor));
             } else {
-                // Leaf — store and report
+                // Leaf — extract doc metadata, store and report
+                Map<String, Object> docMeta = null;
                 if (handler != null) {
+                    try {
+                        docMeta = handler.extractMetadata();
+                    } catch (Exception e) {
+                        log.warnf(e, "Failed to extract metadata for %s", child.path());
+                    }
                     try { handler.close(); } catch (Exception ignored) {}
                 }
 
@@ -157,7 +163,7 @@ public class ProcessChildHandler {
                         NotificationOptions.ofExecutor(executor));
 
                 ChildResult result = new ChildResult(leafRef, child.path(), false,
-                        entryType, formatMeta, mtime);
+                        entryType, formatMeta, entryMeta, docMeta);
                 fanIn.addResult(result);
                 if (fanIn.decrementAndCheck()) {
                     allChildrenCompleteEvent.fireAsync(
@@ -176,14 +182,5 @@ public class ProcessChildHandler {
         byte[] protoBytes = (byte[]) metadata.get("__proto_bytes__");
         if (protoBytes == null || protoBytes.length == 0) return null;
         return new RamBuffer(protoBytes, null);
-    }
-
-    private Instant extractMtime(Map<String, Object> metadata) {
-        if (metadata == null) return null;
-        Object mtime = metadata.get("lastModifiedTime");
-        if (mtime instanceof Long ms) {
-            return Instant.ofEpochMilli(ms);
-        }
-        return null;
     }
 }

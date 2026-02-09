@@ -48,8 +48,8 @@ public class ManifestManager {
                     .setIsContainer(child.ref().isContainer())
                     .setEntryType(child.entryType());
 
-            if (child.mtime() != null) {
-                entry.setMtime(child.mtime().toEpochMilli());
+            if (child.entryMetadata() != null && child.entryMetadata().mtime() != null) {
+                entry.setMtime(child.entryMetadata().mtime().toEpochMilli());
             }
 
             if (child.formatMetadata() != null && child.formatMetadata().size() > 0) {

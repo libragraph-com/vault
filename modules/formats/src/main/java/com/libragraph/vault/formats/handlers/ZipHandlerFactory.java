@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Stream;
 
@@ -109,11 +110,13 @@ public class ZipHandlerFactory implements FormatHandlerFactory {
                         }
 
                         Map<String, Object> metadata = extractEntryMetadata(entry);
+                        EntryMetadata entryMeta = buildEntryMetadata(entry);
 
                         children.add(new ContainerChild(
                             entry.getName(),
                             childBuffer,
-                            metadata
+                            metadata,
+                            entryMeta
                         ));
                     }
                 }
@@ -250,6 +253,26 @@ public class ZipHandlerFactory implements FormatHandlerFactory {
         @Override
         public void close() {
             // Buffer is managed externally
+        }
+
+        private static EntryMetadata buildEntryMetadata(ZipArchiveEntry entry) {
+            Instant mtime = entry.getLastModifiedTime() != null
+                    ? Instant.ofEpochMilli(entry.getLastModifiedTime().toMillis()) : null;
+            Instant ctime = entry.getCreationTime() != null
+                    ? Instant.ofEpochMilli(entry.getCreationTime().toMillis()) : null;
+            Instant atime = entry.getLastAccessTime() != null
+                    ? Instant.ofEpochMilli(entry.getLastAccessTime().toMillis()) : null;
+            Integer posixMode = extractPosixMode(entry);
+
+            return new EntryMetadata(mtime, ctime, atime, posixMode,
+                    null, null, null, null, null);
+        }
+
+        private static Integer extractPosixMode(ZipArchiveEntry entry) {
+            long extAttr = entry.getExternalAttributes();
+            if (extAttr == 0) return null;
+            int unixMode = (int) (extAttr >> 16) & 0xFFFF;
+            return unixMode != 0 ? unixMode : null;
         }
 
         private Map<String, Object> extractEntryMetadata(ZipArchiveEntry entry) {

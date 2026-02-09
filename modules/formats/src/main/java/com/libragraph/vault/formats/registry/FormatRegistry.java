@@ -26,12 +26,21 @@ public class FormatRegistry {
     @Inject
     Instance<Codec> codecs;
 
+    public record HandlerMatch(Handler handler, DetectionCriteria criteria) {}
+
     /**
      * Finds the best handler for the given buffer and context.
      * Reads a header from the buffer, matches against all registered factories,
      * and returns the highest-priority match.
      */
     public Optional<Handler> findHandler(BinaryData buffer, FileContext context) {
+        return findHandlerWithMatch(buffer, context).map(HandlerMatch::handler);
+    }
+
+    /**
+     * Finds the best handler with its matched detection criteria.
+     */
+    public Optional<HandlerMatch> findHandlerWithMatch(BinaryData buffer, FileContext context) {
         byte[] header = buffer.readHeader(HEADER_SIZE);
         String mimeType = context.detectedMimeType().orElse(null);
         String filename = context.filename();
@@ -39,7 +48,7 @@ public class FormatRegistry {
         return StreamSupport.stream(factories.spliterator(), false)
                 .filter(f -> f.getDetectionCriteria().matches(mimeType, filename, header))
                 .max(Comparator.comparingInt(f -> f.getDetectionCriteria().priority()))
-                .map(f -> f.createInstance(buffer, context));
+                .map(f -> new HandlerMatch(f.createInstance(buffer, context), f.getDetectionCriteria()));
     }
 
     /**

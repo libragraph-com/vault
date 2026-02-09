@@ -5,8 +5,10 @@ import com.libragraph.vault.core.event.ChildDiscoveredEvent;
 import com.libragraph.vault.core.event.ChildResult;
 import com.libragraph.vault.core.event.FanInContext;
 import com.libragraph.vault.core.event.IngestFileEvent;
+import com.libragraph.vault.core.event.ObjectCreatedEvent;
 import com.libragraph.vault.core.task.TaskError;
 import com.libragraph.vault.core.task.TaskService;
+import com.libragraph.vault.formats.api.ContainerCapabilities;
 import com.libragraph.vault.formats.api.ContainerChild;
 import com.libragraph.vault.formats.api.FileContext;
 import com.libragraph.vault.formats.api.Handler;
@@ -48,6 +50,9 @@ public class ProcessChildHandler {
     Event<AllChildrenCompleteEvent> allChildrenCompleteEvent;
 
     @Inject
+    Event<ObjectCreatedEvent> objectCreatedEvent;
+
+    @Inject
     TaskService taskService;
 
     @Inject
@@ -80,38 +85,78 @@ public class ProcessChildHandler {
                 return;
             }
 
-            // Detect format to know if child is a container
+            // Detect format with match criteria
             FileContext fileCtx = FileContext.of(child.path());
-            Optional<Handler> optHandler = formatRegistry.findHandler(buffer, fileCtx);
-            boolean isContainer = optHandler.isPresent() && optHandler.get().hasChildren();
-            if (optHandler.isPresent()) {
-                try { optHandler.get().close(); } catch (Exception ignored) {}
-            }
+            Optional<FormatRegistry.HandlerMatch> optMatch =
+                    formatRegistry.findHandlerWithMatch(buffer, fileCtx);
 
-            // Construct BlobRef with full knowledge
-            BlobRef childRef = isContainer
-                    ? BlobRef.container(buffer.hash(), buffer.size())
-                    : BlobRef.leaf(buffer.hash(), buffer.size());
+            Handler handler = optMatch.map(FormatRegistry.HandlerMatch::handler).orElse(null);
+            String mimeType = optMatch.map(m -> m.criteria().primaryMimeType()).orElse(null);
+            boolean isContainer = handler != null && handler.hasChildren();
 
-            // Store leaf
-            if (!isContainer) {
-                blobInserter.insertLeaf(event.tenantId(), event.dbTenantId(),
-                        buffer, childRef, null);
+            // Check for TIER_2 container
+            boolean isTier2 = false;
+            if (isContainer) {
+                ContainerCapabilities caps = handler.getCapabilities();
+                isTier2 = caps != null
+                        && caps.tier() == ContainerCapabilities.ReconstructionTier.TIER_2_STORED;
             }
 
             BinaryData formatMeta = extractFormatMetadata(child.metadata());
             Instant mtime = extractMtime(child.metadata());
 
-            if (isContainer) {
-                // Fire IngestFileEvent for recursive processing
-                // The nested container's AllChildrenCompleteEvent will cascade back
+            if (isTier2) {
+                // TIER_2: store original as leaf, report leaf to parent, bonus-ingest
+                BlobRef leafRef = BlobRef.leaf(buffer.hash(), buffer.size());
+                BlobInserter.InsertResult insert = blobInserter.insertLeaf(
+                        event.tenantId(), event.dbTenantId(), buffer, leafRef, mimeType);
+
+                // Report LEAF to parent FanIn (parent manifest references the leaf, not container)
+                ChildResult result = new ChildResult(leafRef, child.path(), false,
+                        entryType, formatMeta, mtime);
+                fanIn.addResult(result);
+                if (fanIn.decrementAndCheck()) {
+                    allChildrenCompleteEvent.fireAsync(
+                            new AllChildrenCompleteEvent(fanIn, fanIn.results()),
+                            NotificationOptions.ofExecutor(executor));
+                }
+
+                // Fire ObjectCreatedEvent for the stored leaf
+                objectCreatedEvent.fireAsync(new ObjectCreatedEvent(
+                        leafRef, insert.blobId(), mimeType, handler, buffer,
+                        event.tenantId(), event.dbTenantId(), event.taskId()),
+                        NotificationOptions.ofExecutor(executor));
+
+                // Fire BONUS IngestFileEvent — detached from parent FanIn
+                ingestFileEvent.fireAsync(new IngestFileEvent(
+                        event.taskId(), event.tenantId(), event.dbTenantId(),
+                        buffer, child.path(), null, true),
+                        NotificationOptions.ofExecutor(executor));
+            } else if (isContainer) {
+                // TIER_1 container — close handler (IngestFileHandler re-creates it), recurse
+                try { handler.close(); } catch (Exception ignored) {}
+
                 ingestFileEvent.fireAsync(new IngestFileEvent(
                         event.taskId(), event.tenantId(), event.dbTenantId(),
                         buffer, child.path(), fanIn),
                         NotificationOptions.ofExecutor(executor));
             } else {
-                // Leaf — add result and check completion
-                ChildResult result = new ChildResult(childRef, child.path(), false,
+                // Leaf — store and report
+                if (handler != null) {
+                    try { handler.close(); } catch (Exception ignored) {}
+                }
+
+                BlobRef leafRef = BlobRef.leaf(buffer.hash(), buffer.size());
+                BlobInserter.InsertResult insert = blobInserter.insertLeaf(
+                        event.tenantId(), event.dbTenantId(), buffer, leafRef, mimeType);
+
+                // Fire ObjectCreatedEvent for the stored leaf
+                objectCreatedEvent.fireAsync(new ObjectCreatedEvent(
+                        leafRef, insert.blobId(), mimeType, null, buffer,
+                        event.tenantId(), event.dbTenantId(), event.taskId()),
+                        NotificationOptions.ofExecutor(executor));
+
+                ChildResult result = new ChildResult(leafRef, child.path(), false,
                         entryType, formatMeta, mtime);
                 fanIn.addResult(result);
                 if (fanIn.decrementAndCheck()) {

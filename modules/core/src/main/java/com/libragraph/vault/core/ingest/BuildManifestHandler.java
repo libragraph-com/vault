@@ -67,7 +67,8 @@ public class BuildManifestHandler {
 
             // 1. Build manifest proto
             String formatKey = detectFormatKey(fanIn.containerPath());
-            BinaryData manifestData = manifestManager.build(containerRef, formatKey, null, results);
+            BinaryData manifestData = manifestManager.build(containerRef, formatKey,
+                    fanIn.reconstructionTier(), null, results);
 
             // 2. Store manifest and create blob_ref + blob rows for the container
             BlobInserter.InsertResult containerInsert = blobInserter.insertContainer(
@@ -113,6 +114,10 @@ public class BuildManifestHandler {
                             new AllChildrenCompleteEvent(parent, parent.results()),
                             NotificationOptions.ofExecutor(executor));
                 }
+            } else if (fanIn.bonus()) {
+                // Bonus decomposition complete — log only, don't touch task status
+                log.infof("Bonus decomposition complete for task %d, container %s",
+                        fanIn.taskId(), containerRef);
             } else {
                 // Root container — task is complete
                 log.infof("Ingestion complete for task %d, container %s",

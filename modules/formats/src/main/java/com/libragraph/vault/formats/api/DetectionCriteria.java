@@ -47,6 +47,16 @@ public record DetectionCriteria(
     /**
      * Checks if this criteria matches the given file properties.
      */
+    /**
+     * Returns the first non-wildcard MIME type, or null if none.
+     */
+    public String primaryMimeType() {
+        return mimeTypes.stream()
+                .filter(m -> !m.contains("*"))
+                .findFirst()
+                .orElse(null);
+    }
+
     public boolean matches(String mimeType, String filename, byte[] header) {
         // Check magic bytes first (most reliable)
         if (magicBytes != null && header != null) {

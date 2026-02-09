@@ -28,11 +28,13 @@ public class ManifestManager {
      * Builds a serialized Manifest proto from the container's child results.
      */
     public BinaryData build(BlobRef containerRef, String formatKey,
+                            int reconstructionTier,
                             byte[] formatMetadata, List<ChildResult> results) {
         ManifestProto.Manifest.Builder builder = ManifestProto.Manifest.newBuilder()
                 .setContainerHash(ByteString.copyFrom(containerRef.hash().bytes()))
                 .setContainerSize(containerRef.leafSize())
-                .setFormatKey(formatKey);
+                .setFormatKey(formatKey)
+                .setReconstructionTier(reconstructionTier);
 
         if (formatMetadata != null && formatMetadata.length > 0) {
             builder.setFormatMetadata(ByteString.copyFrom(formatMetadata));

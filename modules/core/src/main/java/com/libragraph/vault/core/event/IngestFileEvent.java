@@ -8,5 +8,11 @@ public record IngestFileEvent(
         int dbTenantId,
         BinaryData buffer,
         String filename,
-        FanInContext fanIn
-) {}
+        FanInContext fanIn,
+        boolean bonus
+) {
+    public IngestFileEvent(int taskId, String tenantId, int dbTenantId,
+                           BinaryData buffer, String filename, FanInContext fanIn) {
+        this(taskId, tenantId, dbTenantId, buffer, filename, fanIn, false);
+    }
+}

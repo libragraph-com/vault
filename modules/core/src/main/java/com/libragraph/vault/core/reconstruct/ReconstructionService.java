@@ -53,6 +53,13 @@ public class ReconstructionService {
     public BinaryData reconstruct(String tenantId, BlobRef containerRef) {
         ManifestProto.Manifest manifest = manifestManager.load(tenantId, containerRef);
 
+        int tier = manifest.getReconstructionTier();
+        if (tier == 2) {
+            // TIER_2: original stored as leaf — read directly
+            BlobRef leafRef = BlobRef.leaf(containerRef.hash(), containerRef.leafSize());
+            return blobService.retrieve(tenantId, leafRef).await().indefinitely();
+        }
+
         String formatKey = manifest.getFormatKey();
         log.debugf("Reconstructing container %s (format=%s, %d entries)",
                 containerRef, formatKey, manifest.getEntriesCount());

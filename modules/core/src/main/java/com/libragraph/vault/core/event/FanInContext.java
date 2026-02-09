@@ -19,10 +19,20 @@ public class FanInContext {
     private final String tenantId;
     private final int dbTenantId;
     private final int taskId;
+    private final boolean bonus;
+    private final int reconstructionTier;
 
     public FanInContext(int expectedChildren, FanInContext parent,
                         BlobRef containerRef, String containerPath,
                         String tenantId, int dbTenantId, int taskId) {
+        this(expectedChildren, parent, containerRef, containerPath,
+                tenantId, dbTenantId, taskId, false, 1);
+    }
+
+    public FanInContext(int expectedChildren, FanInContext parent,
+                        BlobRef containerRef, String containerPath,
+                        String tenantId, int dbTenantId, int taskId,
+                        boolean bonus, int reconstructionTier) {
         this.contextId = UUID.randomUUID();
         this.remaining = new AtomicInteger(expectedChildren);
         this.parent = parent;
@@ -32,6 +42,8 @@ public class FanInContext {
         this.tenantId = tenantId;
         this.dbTenantId = dbTenantId;
         this.taskId = taskId;
+        this.bonus = bonus;
+        this.reconstructionTier = reconstructionTier;
     }
 
     public UUID contextId() {
@@ -60,6 +72,14 @@ public class FanInContext {
 
     public int taskId() {
         return taskId;
+    }
+
+    public boolean bonus() {
+        return bonus;
+    }
+
+    public int reconstructionTier() {
+        return reconstructionTier;
     }
 
     public void addResult(ChildResult result) {

@@ -47,6 +47,9 @@ class TaskClaimTest {
     @BeforeEach
     void setUp() {
         tenantId = testConfig.ensureTestTenant();
+        // Cancel leftover OPEN tasks from previous runs (dev profile persists data)
+        jdbi.useHandle(handle -> handle.createUpdate(
+                "UPDATE task SET status = 6 WHERE status = 0").execute());
         // Ensure resource rows exist for declarative resource-dependent tasks (idempotent)
         jdbi.useHandle(handle -> {
             handle.execute("INSERT INTO task_resource (id, name) VALUES (99, 'test-service') ON CONFLICT DO NOTHING");

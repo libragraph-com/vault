@@ -11,12 +11,13 @@ ObjectStorage provides reactive, tenant-isolated blob persistence with transpare
 
 ```java
 public interface ObjectStorage {
-    Uni<BinaryData> read(UUID tenantId, BlobRef ref);
-    Uni<Void> write(UUID tenantId, BlobRef ref, BinaryData data, String mimeType);
-    Uni<Boolean> exists(UUID tenantId, BlobRef ref);
-    Uni<Void> delete(UUID tenantId, BlobRef ref);
-    Multi<UUID> listTenants();
-    Multi<BlobRef> listContainers(UUID tenantId);
+    Uni<BinaryData> read(String tenantId, BlobRef ref);
+    Uni<Void> write(String tenantId, BlobRef ref, BinaryData data, String mimeType);
+    Uni<Boolean> exists(String tenantId, BlobRef ref);
+    Uni<Void> delete(String tenantId, BlobRef ref);
+    Uni<Void> deleteTenant(String tenantId);
+    Multi<String> listTenants();
+    Multi<BlobRef> listContainers(String tenantId);
 }
 ```
 
@@ -67,17 +68,34 @@ Thin facade over ObjectStorage:
 public class BlobService {
     @Inject ObjectStorage storage;
 
-    public Uni<BinaryData> retrieve(UUID tenantId, BlobRef ref) {
+    public Uni<BinaryData> retrieve(String tenantId, BlobRef ref) {
         return storage.read(tenantId, ref);
     }
 
-    public Uni<Void> store(UUID tenantId, BlobRef ref, BinaryData data, String mimeType) {
+    public Uni<Void> store(String tenantId, BlobRef ref, BinaryData data, String mimeType) {
         return storage.write(tenantId, ref, data, mimeType);
     }
 }
 ```
 
 BlobService may add caching, metrics, or validation in the future. For now, it's primarily a convenience layer.
+
+## TenantStorageResolver
+
+Maps DB tenant IDs (int FK) to ObjectStorage tenant keys (String):
+
+```java
+@ApplicationScoped
+public class TenantStorageResolver {
+    public String resolve(int tenantId) {
+        // If tenant has global_id (UUID) → global_id.toString()
+        // Otherwise → String.valueOf(id)
+    }
+}
+```
+
+Used by ingestion pipeline and reconstruction to bridge DB tenant IDs to storage keys.
+Results are cached in a `ConcurrentHashMap`.
 
 ## BinaryData Abstraction
 

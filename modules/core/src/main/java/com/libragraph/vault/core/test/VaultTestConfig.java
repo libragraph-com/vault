@@ -47,18 +47,18 @@ public class VaultTestConfig {
             if (cachedTenantId != null) return cachedTenantId;
 
             cachedTenantId = jdbi.withHandle(h -> {
-                int orgId = h.createUpdate(
+                // Upsert org (ON CONFLICT uses org_name_unique constraint)
+                h.createUpdate(
                                 "INSERT INTO organization (name) VALUES ('test-org') " +
-                                        "ON CONFLICT DO NOTHING")
+                                        "ON CONFLICT (name) DO NOTHING")
                         .execute();
 
-                // Get or create the org
                 int org = h.createQuery("SELECT id FROM organization WHERE name = 'test-org'")
                         .mapTo(Integer.class).one();
 
-                // Get or create the tenant
+                // Upsert tenant (ON CONFLICT uses tenant_org_name_unique constraint)
                 h.createUpdate("INSERT INTO tenant (org_id, name) VALUES (:orgId, 'test-tenant') " +
-                                "ON CONFLICT DO NOTHING")
+                                "ON CONFLICT (org_id, name) DO NOTHING")
                         .bind("orgId", org)
                         .execute();
 

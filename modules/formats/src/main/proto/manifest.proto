@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package com.libragraph.vault.formats.manifest;
+
+option java_package = "com.libragraph.vault.formats.proto";
+option java_outer_classname = "ManifestProto";
+
+message Manifest {
+    bytes container_hash = 1;    // 16-byte BLAKE3-128
+    int64 container_size = 2;    // leaf_size of the container
+    string format_key = 3;       // e.g. "zip", "tar"
+    bytes format_metadata = 4;   // format-level proto (ZipContainerMetadata)
+    repeated ManifestEntry entries = 5;
+}
+
+message ManifestEntry {
+    string path = 1;
+    bytes content_hash = 2;      // 16-byte BLAKE3-128
+    int64 leaf_size = 3;
+    bool is_container = 4;       // true if this child is itself a container
+    int32 entry_type = 5;        // 0=file, 1=directory, 2=symlink
+    int64 mtime = 6;             // millis since epoch
+    bytes format_metadata = 7;   // entry-level proto (ZipEntryMetadata)
+}

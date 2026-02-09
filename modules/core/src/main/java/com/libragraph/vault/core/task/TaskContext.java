@@ -7,6 +7,8 @@ public interface TaskContext {
 
     int taskId();
 
+    int tenantId();
+
     String taskType();
 
     int createSubtask(Class<? extends VaultTask> taskClass, Object input);

@@ -5,13 +5,13 @@ import com.libragraph.vault.util.buffer.BinaryData;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 
-import java.util.UUID;
-
 /**
  * Blob storage abstraction for tenant-isolated, content-addressed persistence.
  *
  * <p>Implementations decide compression strategy transparently —
  * callers always provide and receive uncompressed data.
+ *
+ * <p>Tenant IDs are opaque strings (typically UUID.toString() or DB ID strings).
  */
 public interface ObjectStorage {
 
@@ -21,20 +21,21 @@ public interface ObjectStorage {
      * @throws BlobNotFoundException if the blob does not exist
      * @throws StorageException on I/O errors
      */
-    Uni<BinaryData> read(UUID tenantId, BlobRef ref);
+    Uni<BinaryData> read(String tenantId, BlobRef ref);
 
     /**
-     * Writes a blob. Driver decides compression based on mimeType hint.
+     * Creates a blob. Write-once — callers must not overwrite existing keys.
+     * Driver decides compression based on mimeType hint.
      *
      * @param mimeType optional hint for compression decision (may be null)
      * @throws StorageException on I/O errors
      */
-    Uni<Void> write(UUID tenantId, BlobRef ref, BinaryData data, String mimeType);
+    Uni<Void> create(String tenantId, BlobRef ref, BinaryData data, String mimeType);
 
     /**
      * Checks whether a blob exists.
      */
-    Uni<Boolean> exists(UUID tenantId, BlobRef ref);
+    Uni<Boolean> exists(String tenantId, BlobRef ref);
 
     /**
      * Deletes a blob.
@@ -42,23 +43,23 @@ public interface ObjectStorage {
      * @throws BlobNotFoundException if the blob does not exist
      * @throws StorageException on I/O errors
      */
-    Uni<Void> delete(UUID tenantId, BlobRef ref);
+    Uni<Void> delete(String tenantId, BlobRef ref);
 
     /**
      * Deletes a tenant's entire storage (all blobs and the container/bucket).
      *
      * @throws StorageException on I/O errors
      */
-    Uni<Void> deleteTenant(UUID tenantId);
+    Uni<Void> deleteTenant(String tenantId);
 
     /**
      * Lists all tenant IDs that have stored blobs.
      */
-    Multi<UUID> listTenants();
+    Multi<String> listTenants();
 
     /**
      * Lists container (manifest) BlobRefs for a tenant.
      * Only returns blobs where {@code ref.isContainer() == true}.
      */
-    Multi<BlobRef> listContainers(UUID tenantId);
+    Multi<BlobRef> listContainers(String tenantId);
 }

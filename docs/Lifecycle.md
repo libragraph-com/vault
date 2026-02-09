@@ -123,6 +123,14 @@ claiming work that would immediately fail due to a down dependency.
 `ServiceStateChangedEvent` remains the sole mechanism for in-memory health tracking;
 there is no database table tracking runtime service state or current load.
 
+### Vault Task Types
+
+| Task Type | Class | Description |
+|-----------|-------|-------------|
+| `ingest.container` | `IngestContainerTask` | Ingests a container from ObjectStorage |
+| `reconstruct.container` | `ReconstructContainerTask` | Reconstructs a container from manifest + blobs |
+| `rebuild.sql` | `RebuildSqlTask` | Rebuilds all SQL rows from ObjectStorage |
+
 ## Quarkus Lifecycle Mapping
 
 | vault-mvp | Vault (Quarkus) |

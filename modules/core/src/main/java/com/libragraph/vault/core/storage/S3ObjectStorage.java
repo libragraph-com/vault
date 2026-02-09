@@ -26,7 +26,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * S3/MinIO-backed ObjectStorage for production use.
@@ -44,7 +43,7 @@ public class S3ObjectStorage implements ObjectStorage {
     @ConfigProperty(name = "vault.object-store.bucket-prefix", defaultValue = "vault-")
     String bucketPrefix;
 
-    private String bucketName(UUID tenantId) {
+    private String bucketName(String tenantId) {
         return bucketPrefix + tenantId;
     }
 
@@ -59,7 +58,7 @@ public class S3ObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Uni<BinaryData> read(UUID tenantId, BlobRef ref) {
+    public Uni<BinaryData> read(String tenantId, BlobRef ref) {
         return Uni.createFrom().item(() -> {
             String bucket = bucketName(tenantId);
             String key = ref.toString();
@@ -80,7 +79,7 @@ public class S3ObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Uni<Void> write(UUID tenantId, BlobRef ref, BinaryData data, String mimeType) {
+    public Uni<Void> create(String tenantId, BlobRef ref, BinaryData data, String mimeType) {
         return Uni.createFrom().voidItem().invoke(() -> {
             String bucket = bucketName(tenantId);
             ensureBucket(bucket);
@@ -99,7 +98,7 @@ public class S3ObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Uni<Boolean> exists(UUID tenantId, BlobRef ref) {
+    public Uni<Boolean> exists(String tenantId, BlobRef ref) {
         return Uni.createFrom().item(() -> {
             String bucket = bucketName(tenantId);
             try {
@@ -119,7 +118,7 @@ public class S3ObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Uni<Void> delete(UUID tenantId, BlobRef ref) {
+    public Uni<Void> delete(String tenantId, BlobRef ref) {
         return Uni.createFrom().voidItem().invoke(() -> {
             String bucket = bucketName(tenantId);
             String key = ref.toString();
@@ -146,7 +145,7 @@ public class S3ObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Uni<Void> deleteTenant(UUID tenantId) {
+    public Uni<Void> deleteTenant(String tenantId) {
         return Uni.createFrom().voidItem().invoke(() -> {
             String bucket = bucketName(tenantId);
             try {
@@ -169,19 +168,14 @@ public class S3ObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Multi<UUID> listTenants() {
+    public Multi<String> listTenants() {
         return Multi.createFrom().items(() -> {
             try {
-                List<UUID> tenants = new ArrayList<>();
+                List<String> tenants = new ArrayList<>();
                 for (Bucket bucket : minioClient.listBuckets()) {
                     String name = bucket.name();
                     if (name.startsWith(bucketPrefix)) {
-                        String suffix = name.substring(bucketPrefix.length());
-                        try {
-                            tenants.add(UUID.fromString(suffix));
-                        } catch (IllegalArgumentException ignored) {
-                            // skip non-tenant buckets
-                        }
+                        tenants.add(name.substring(bucketPrefix.length()));
                     }
                 }
                 return tenants.stream();
@@ -192,7 +186,7 @@ public class S3ObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Multi<BlobRef> listContainers(UUID tenantId) {
+    public Multi<BlobRef> listContainers(String tenantId) {
         return Multi.createFrom().items(() -> {
             String bucket = bucketName(tenantId);
             try {

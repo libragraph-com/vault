@@ -83,16 +83,14 @@ Carry forward from vault-mvp, adapted as Java records:
 
 ```java
 // Ingestion pipeline
-public record IngestFileEvent(UUID taskId, BlobRef containerRef, Path path, FanInContext fanIn) {}
-public record ChildDiscoveredEvent(ContainerChild child, FanInContext fanIn) {}
+public record IngestFileEvent(int taskId, String tenantId, int dbTenantId, BinaryData buffer, String filename, FanInContext fanIn) {}
+public record ChildDiscoveredEvent(ContainerChild child, FanInContext fanIn, String tenantId, int dbTenantId, int taskId) {}
 public record AllChildrenCompleteEvent(FanInContext fanIn, List<ChildResult> results) {}
-public record ObjectCreatedEvent(BlobRef ref, UUID leafId) {}
-public record DedupHitEvent(BlobRef ref) {}
-public record ManifestBuiltEvent(BlobRef containerRef) {}  // manifest at containerRef (isContainer=true)
-public record ContainerCompleteEvent(BlobRef containerRef, int childCount) {}
+public record ObjectCreatedEvent(BlobRef ref, long blobId) {}
+public record ManifestBuiltEvent(BlobRef containerRef) {}
 
 // System
-public record ServiceStateEvent(String serviceName, String oldState, String newState) {}
+public record ServiceStateChangedEvent(String serviceId, ManagedService.State oldState, ManagedService.State newState, Instant timestamp) {}
 ```
 
 > **DEPENDENCY:** Events reference [BlobRef](Architecture.md), FanInContext
@@ -107,8 +105,17 @@ have been processed, without polling.
 public class FanInContext {
     private final UUID contextId;
     private final AtomicInteger remaining;
-    private final FanInContext parent;  // For nested containers
+    private final FanInContext parent;
     private final ConcurrentLinkedQueue<ChildResult> results;
+    private final BlobRef containerRef;
+    private final String containerPath;
+    private final String tenantId;
+    private final int dbTenantId;
+    private final int taskId;
+
+    public FanInContext(int expectedChildren, FanInContext parent,
+                        BlobRef containerRef, String containerPath,
+                        String tenantId, int dbTenantId, int taskId) { ... }
 
     /** Returns true if this was the last child */
     public boolean decrementAndCheck() {
@@ -242,8 +249,8 @@ public class IngestMetrics {
         registry.summary("vault.leaves.size").record(event.ref().leafSize());
     }
 
-    void onDedup(@Observes DedupHitEvent event) {
-        registry.counter("vault.dedup.hits").increment();
+    void onCreated(@Observes ObjectCreatedEvent event) {
+        registry.counter("vault.objects.created").increment();
     }
 }
 ```

@@ -1,3 +1,11 @@
 package com.libragraph.vault.core.event;
 
-public record ChildDiscoveredEvent(ChildResult child, FanInContext fanIn) {}
+import com.libragraph.vault.formats.api.ContainerChild;
+
+public record ChildDiscoveredEvent(
+        ContainerChild child,
+        FanInContext fanIn,
+        String tenantId,
+        int dbTenantId,
+        int taskId
+) {}

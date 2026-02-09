@@ -25,10 +25,10 @@ IngestFileEvent
   │     └─ Fire ChildDiscoveredEvent per child
   │
   ├─► ProcessChildHandler (per child)
-  │     ├─ Hash + dedup check (leafDao.exists())
+  │     ├─ Hash + dedup check via DedupChecker
   │     ├─ If nested container → fire IngestFileEvent (re-enter pipeline)
-  │     ├─ If new leaf → compress, store blob, insert DB record
-  │     ├─ Fire ObjectCreatedEvent or DedupHitEvent
+  │     ├─ If new leaf → store blob, insert DB record via BlobInserter
+  │     ├─ Fire ObjectCreatedEvent
   │     └─ Decrement fan-in → if last child, fire AllChildrenCompleteEvent
   │
   └─► BuildManifestHandler (when all children complete)
@@ -50,17 +50,18 @@ public class ProcessContainerHandler {
     @Inject Event<ChildDiscoveredEvent> childEvent;
 
     void onIngest(@Observes IngestFileEvent event) {
-        BlobRef containerRef = event.containerRef();
-        Handler handler = formatRegistry.findHandler(containerRef);
+        Handler handler = formatRegistry.findHandler(event.buffer(), event.filename());
 
         FanInContext fanIn = new FanInContext(
-            UuidCreator.getTimeOrderedEpoch(),
-            handler.extractChildren().count(),
-            event.fanIn()  // parent context, if nested
+            handler.extractChildren().size(),
+            event.fanIn(),  // parent context, if nested
+            containerRef, event.filename(),
+            event.tenantId(), event.dbTenantId(), event.taskId()
         );
 
         handler.extractChildren().forEach(child ->
-            childEvent.fire(new ChildDiscoveredEvent(child, fanIn, containerRef))
+            childEvent.fire(new ChildDiscoveredEvent(child, fanIn,
+                event.tenantId(), event.dbTenantId(), event.taskId()))
         );
     }
 }
@@ -72,7 +73,8 @@ public class ProcessContainerHandler {
 @ApplicationScoped
 public class ProcessChildHandler {
 
-    @Inject LeafDao leafDao;
+    @Inject DedupChecker dedupChecker;
+    @Inject BlobInserter blobInserter;
     @Inject BlobService blobService;
     @Inject Event<IngestFileEvent> ingestEvent;
     @Inject Event<ObjectCreatedEvent> storedEvent;
@@ -80,22 +82,26 @@ public class ProcessChildHandler {
     void onChild(@Observes ChildDiscoveredEvent event) {
         ContentHash hash = computeHash(event.child().buffer());
         long size = event.child().buffer().size();
+        BlobRef ref = BlobRef.leaf(hash, size);
 
-        // Dedup via DB query (NOT storage probing)
-        if (leafDao.exists(hash.bytes())) {
-            handleDedupHit(event, hash);
+        // Dedup via BlobRef-based DB query (NOT storage probing)
+        if (dedupChecker.exists(ref, event.dbTenantId())) {
+            event.fanIn().addResult(new ChildResult(ref, event.child().path()));
+            maybeComplete(event.fanIn());
             return;
         }
 
         if (isContainer(event.child())) {
             // Re-enter pipeline for nested container
             BlobRef childRef = BlobRef.container(hash, size);
-            ingestEvent.fire(new IngestFileEvent(childRef, event.child().path(), event.fanIn()));
+            ingestEvent.fire(new IngestFileEvent(event.taskId(),
+                event.tenantId(), event.dbTenantId(),
+                event.child().buffer(), event.child().path(), event.fanIn()));
         } else {
-            // Store leaf
-            BlobRef ref = compressAndStore(event.child(), hash, size);
-            leafDao.insert(toRecord(ref));
-            storedEvent.fire(new ObjectCreatedEvent(ref));
+            // Store leaf and insert DB records via BlobInserter
+            blobService.store(event.tenantId(), ref, event.child().buffer(), null);
+            long blobId = blobInserter.insert(ref, event.dbTenantId());
+            storedEvent.fire(new ObjectCreatedEvent(ref, blobId));
             event.fanIn().addResult(new ChildResult(ref, event.child().path()));
             maybeComplete(event.fanIn());
         }

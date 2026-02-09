@@ -97,6 +97,7 @@ Migration files are plain SQL in `app/src/main/resources/db/migration/`:
 
 ```
 V1__initial_schema.sql
+V2__schema_fixes.sql
 ```
 
 > **DECISION:** Flyway over Liquibase. SQL-file-based migrations are simpler
@@ -112,14 +113,16 @@ The canonical schema is defined in [`docs/research/RevisedSchema.sql`](research/
 
 **Core tables:**
 - `blob_ref` — Global content-addressed blob registry (spans tenants, deduplication boundary)
-- `blob` — Per-tenant blob ownership (same `blob_ref` in two tenants = two rows)
-- `container` — Blobs that have extractable children
+- `blob` — Per-tenant blob ownership (same `blob_ref` in two tenants = two rows) (V2: `UNIQUE(tenant_id, blob_ref_id)` enforces dedup invariant)
+- `container` — Blobs that have extractable children (V2: `parent_id` removed — multi-parent via entries table)
 - `entry` — Files/directories within containers
 
 **Lookup tables:**
 - `task_status` — Task state enum (`OPEN`, `IN_PROGRESS`, `BLOCKED`, etc.)
 - `entry_type` — Container entry kinds (`file`, `directory`, `symlink`)
 - `format_handler` — Registered format handlers (upserted at startup)
+- `organization` — Organization registry (V2: `UNIQUE(name)`)
+- `tenant` — Tenant registry (V2: `UNIQUE(org_id, name)`)
 
 **Key principles:**
 - SERIAL/BIGSERIAL for surrogate keys on ephemeral/internal data (better join performance, smaller indexes)
@@ -138,10 +141,10 @@ attached via `jdbi.onDemand(Dao.class)` or `handle.attach(Dao.class)`:
 public interface BlobRefDao {
 
     @SqlQuery("SELECT * FROM blob_ref WHERE content_hash = :hash AND leaf_size = :leafSize AND container = :container")
-    @RegisterBeanMapper(BlobRefRecord.class)
-    Optional<BlobRefRecord> find(@Bind("hash") byte[] hash,
-                                  @Bind("leafSize") long leafSize,
-                                  @Bind("container") boolean container);
+    @RegisterConstructorMapper(BlobRefRecord.class)
+    Optional<BlobRefRecord> findByRef(@Bind("hash") byte[] hash,
+                                       @Bind("leafSize") long leafSize,
+                                       @Bind("container") boolean container);
 
     @SqlQuery("SELECT EXISTS(SELECT 1 FROM blob_ref WHERE content_hash = :hash AND leaf_size = :leafSize AND container = :container)")
     boolean exists(@Bind("hash") byte[] hash,

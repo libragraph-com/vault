@@ -25,6 +25,12 @@ dependencies {
 // vault.test.resetTenant     → vault.test.reset-tenant
 // vault.test.profile         → quarkus.test.profile
 tasks.withType<Test> {
+    // Always disable background workers and scheduler in tests — tests drive
+    // task execution directly. System properties have highest priority in
+    // SmallRye Config, overriding any profile properties.
+    systemProperty("vault.tasks.worker-count", "0")
+    systemProperty("quarkus.scheduler.enabled", "false")
+
     val propMappings = mapOf(
         "vault.test.tenantId"     to "vault.test.tenant-id",
         "vault.test.resetTenant"  to "vault.test.reset-tenant",

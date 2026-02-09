@@ -1,7 +1,12 @@
 package com.libragraph.vault.core.event;
 
-import com.libragraph.vault.util.BlobRef;
+import com.libragraph.vault.util.buffer.BinaryData;
 
-import java.nio.file.Path;
-
-public record IngestFileEvent(int taskId, BlobRef containerRef, Path path, FanInContext fanIn) {}
+public record IngestFileEvent(
+        int taskId,
+        String tenantId,
+        int dbTenantId,
+        BinaryData buffer,
+        String filename,
+        FanInContext fanIn
+) {}

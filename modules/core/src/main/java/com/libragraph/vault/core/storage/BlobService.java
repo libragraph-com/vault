@@ -7,8 +7,6 @@ import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import java.util.UUID;
-
 /**
  * Thin facade over ObjectStorage.
  *
@@ -20,31 +18,31 @@ public class BlobService {
     @Inject
     ObjectStorage storage;
 
-    public Uni<BinaryData> retrieve(UUID tenantId, BlobRef ref) {
+    public Uni<BinaryData> retrieve(String tenantId, BlobRef ref) {
         return storage.read(tenantId, ref);
     }
 
-    public Uni<Void> store(UUID tenantId, BlobRef ref, BinaryData data, String mimeType) {
-        return storage.write(tenantId, ref, data, mimeType);
+    public Uni<Void> create(String tenantId, BlobRef ref, BinaryData data, String mimeType) {
+        return storage.create(tenantId, ref, data, mimeType);
     }
 
-    public Uni<Boolean> exists(UUID tenantId, BlobRef ref) {
+    public Uni<Boolean> exists(String tenantId, BlobRef ref) {
         return storage.exists(tenantId, ref);
     }
 
-    public Uni<Void> delete(UUID tenantId, BlobRef ref) {
+    public Uni<Void> delete(String tenantId, BlobRef ref) {
         return storage.delete(tenantId, ref);
     }
 
-    public Uni<Void> deleteTenant(UUID tenantId) {
+    public Uni<Void> deleteTenant(String tenantId) {
         return storage.deleteTenant(tenantId);
     }
 
-    public Multi<UUID> listTenants() {
+    public Multi<String> listTenants() {
         return storage.listTenants();
     }
 
-    public Multi<BlobRef> listContainers(UUID tenantId) {
+    public Multi<BlobRef> listContainers(String tenantId) {
         return storage.listContainers(tenantId);
     }
 }

@@ -28,6 +28,11 @@ class DefaultTaskContext implements TaskContext {
     }
 
     @Override
+    public int tenantId() {
+        return tenantId;
+    }
+
+    @Override
     public String taskType() {
         return taskType;
     }

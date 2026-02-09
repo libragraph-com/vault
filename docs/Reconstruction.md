@@ -4,10 +4,13 @@ Protocol for rebuilding original containers from manifests and stored leaves.
 
 ## Flow
 
+Reconstruction reads ONLY from ObjectStorage — no database queries are required.
+The manifest format is defined in `modules/formats/src/main/proto/manifest.proto`.
+
 ```
 1. Load manifest via container BlobRef:
    BlobRef containerRef = BlobRef.container(containerHash, containerSize)
-   ManifestProto manifest = manifestManager.readManifest(containerRef)
+   ManifestProto.Manifest manifest = manifestManager.readManifest(tenantId, containerRef)
 
 2. For each ManifestEntry:
    BlobRef ref = entry.isContainer
@@ -24,7 +27,7 @@ Protocol for rebuilding original containers from manifests and stored leaves.
 
 **Key property:** No database query during reconstruction. Every ManifestEntry
 contains `is_container` — all information needed to create a BlobRef.
-Single lookup per entry.
+Single lookup per entry. All data comes from ObjectStorage.
 
 ## Reconstruction Modes
 
@@ -53,10 +56,10 @@ public class ReconstructionService {
     @Inject BlobService blobService;
     @Inject FormatRegistry formatRegistry;
 
-    public ReconstructionResult reconstruct(BlobRef containerRef, Path outputPath,
-                                            ReconstructionMode mode) {
+    public ReconstructionResult reconstruct(String tenantId, BlobRef containerRef,
+                                            Path outputPath, ReconstructionMode mode) {
         // 1. Read manifest
-        ManifestProto manifest = manifestManager.readManifest(containerRef);
+        ManifestProto.Manifest manifest = manifestManager.readManifest(tenantId, containerRef);
 
         // 2. Get format handler
         Handler handler = formatRegistry.getHandler(manifest.getHeader().getFormat());
@@ -80,7 +83,7 @@ public class ReconstructionService {
         );
     }
 
-    private ContainerChild retrieveEntry(ManifestProto.ManifestEntry entry) {
+    private ContainerChild retrieveEntry(String tenantId, ManifestProto.ManifestEntry entry) {
         ContentHash hash = ContentHash.fromBytes(entry.getTargetHash());
         BlobRef ref = entry.getIsContainer()
             ? BlobRef.container(hash, entry.getTargetSize())

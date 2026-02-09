@@ -39,6 +39,11 @@ class StaleTaskRecoveryTest {
     @BeforeEach
     void setUp() {
         tenantId = testConfig.ensureTestTenant();
+        // Cancel leftover OPEN tasks and mark stale BACKGROUND/IN_PROGRESS as DEAD
+        // so they don't interfere with sweep assertions (dev profile persists data)
+        jdbi.useHandle(handle -> {
+            handle.createUpdate("UPDATE task SET status = 6 WHERE status IN (0, 1, 3)").execute();
+        });
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.libragraph.vault.core.event;
 
+import com.libragraph.vault.util.BlobRef;
+
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -12,15 +14,24 @@ public class FanInContext {
     private final FanInContext parent;
     private final ConcurrentLinkedQueue<ChildResult> results;
 
-    public FanInContext(int expectedChildren) {
-        this(expectedChildren, null);
-    }
+    private final BlobRef containerRef;
+    private final String containerPath;
+    private final String tenantId;
+    private final int dbTenantId;
+    private final int taskId;
 
-    public FanInContext(int expectedChildren, FanInContext parent) {
+    public FanInContext(int expectedChildren, FanInContext parent,
+                        BlobRef containerRef, String containerPath,
+                        String tenantId, int dbTenantId, int taskId) {
         this.contextId = UUID.randomUUID();
         this.remaining = new AtomicInteger(expectedChildren);
         this.parent = parent;
         this.results = new ConcurrentLinkedQueue<>();
+        this.containerRef = containerRef;
+        this.containerPath = containerPath;
+        this.tenantId = tenantId;
+        this.dbTenantId = dbTenantId;
+        this.taskId = taskId;
     }
 
     public UUID contextId() {
@@ -29,6 +40,26 @@ public class FanInContext {
 
     public FanInContext parent() {
         return parent;
+    }
+
+    public BlobRef containerRef() {
+        return containerRef;
+    }
+
+    public String containerPath() {
+        return containerPath;
+    }
+
+    public String tenantId() {
+        return tenantId;
+    }
+
+    public int dbTenantId() {
+        return dbTenantId;
+    }
+
+    public int taskId() {
+        return taskId;
     }
 
     public void addResult(ChildResult result) {

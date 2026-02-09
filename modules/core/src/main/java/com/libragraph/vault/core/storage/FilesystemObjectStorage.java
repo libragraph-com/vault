@@ -1,7 +1,6 @@
 package com.libragraph.vault.core.storage;
 
 import com.libragraph.vault.util.BlobRef;
-import com.libragraph.vault.util.ContentHash;
 import com.libragraph.vault.util.buffer.BinaryData;
 import com.libragraph.vault.util.buffer.RamBuffer;
 import io.quarkus.arc.properties.IfBuildProperty;
@@ -22,7 +21,6 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Filesystem-backed ObjectStorage for development and testing.
@@ -39,15 +37,15 @@ public class FilesystemObjectStorage implements ObjectStorage {
     @ConfigProperty(name = "vault.object-store.filesystem.root")
     String root;
 
-    private Path resolvePath(UUID tenantId, BlobRef ref) {
+    private Path resolvePath(String tenantId, BlobRef ref) {
         String hex = ref.hash().toHex();
         String tier1 = hex.substring(0, 2);
         String tier2 = hex.substring(2, 4);
-        return Path.of(root, tenantId.toString(), tier1, tier2, ref.toString());
+        return Path.of(root, tenantId, tier1, tier2, ref.toString());
     }
 
     @Override
-    public Uni<BinaryData> read(UUID tenantId, BlobRef ref) {
+    public Uni<BinaryData> read(String tenantId, BlobRef ref) {
         return Uni.createFrom().item(() -> {
             Path path = resolvePath(tenantId, ref);
             if (!Files.exists(path)) {
@@ -63,14 +61,13 @@ public class FilesystemObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Uni<Void> write(UUID tenantId, BlobRef ref, BinaryData data, String mimeType) {
+    public Uni<Void> create(String tenantId, BlobRef ref, BinaryData data, String mimeType) {
         return Uni.createFrom().voidItem().invoke(() -> {
             Path path = resolvePath(tenantId, ref);
             try {
                 Files.createDirectories(path.getParent());
                 try (FileChannel out = FileChannel.open(path,
-                        StandardOpenOption.CREATE,
-                        StandardOpenOption.TRUNCATE_EXISTING,
+                        StandardOpenOption.CREATE_NEW,
                         StandardOpenOption.WRITE)) {
                     data.position(0);
                     ByteBuffer buf = ByteBuffer.allocate(8192);
@@ -89,12 +86,12 @@ public class FilesystemObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Uni<Boolean> exists(UUID tenantId, BlobRef ref) {
+    public Uni<Boolean> exists(String tenantId, BlobRef ref) {
         return Uni.createFrom().item(() -> Files.exists(resolvePath(tenantId, ref)));
     }
 
     @Override
-    public Uni<Void> delete(UUID tenantId, BlobRef ref) {
+    public Uni<Void> delete(String tenantId, BlobRef ref) {
         return Uni.createFrom().voidItem().invoke(() -> {
             Path path = resolvePath(tenantId, ref);
             try {
@@ -108,15 +105,12 @@ public class FilesystemObjectStorage implements ObjectStorage {
         });
     }
 
-    /**
-     * Removes empty directories from {@code dir} up to (but not including) {@code stop}.
-     */
     private void pruneEmptyParents(Path dir, Path stop) throws IOException {
         Path current = dir;
         while (current != null && !current.equals(stop)) {
             try (DirectoryStream<Path> entries = Files.newDirectoryStream(current)) {
                 if (entries.iterator().hasNext()) {
-                    break; // not empty
+                    break;
                 }
             }
             Files.delete(current);
@@ -125,9 +119,9 @@ public class FilesystemObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Uni<Void> deleteTenant(UUID tenantId) {
+    public Uni<Void> deleteTenant(String tenantId) {
         return Uni.createFrom().voidItem().invoke(() -> {
-            Path tenantPath = Path.of(root, tenantId.toString());
+            Path tenantPath = Path.of(root, tenantId);
             if (!Files.isDirectory(tenantPath)) {
                 return;
             }
@@ -154,21 +148,17 @@ public class FilesystemObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Multi<UUID> listTenants() {
+    public Multi<String> listTenants() {
         return Multi.createFrom().items(() -> {
             Path rootPath = Path.of(root);
             if (!Files.isDirectory(rootPath)) {
-                return java.util.stream.Stream.empty();
+                return java.util.stream.Stream.<String>empty();
             }
             try (DirectoryStream<Path> dirs = Files.newDirectoryStream(rootPath)) {
-                List<UUID> tenants = new ArrayList<>();
+                List<String> tenants = new ArrayList<>();
                 for (Path dir : dirs) {
                     if (Files.isDirectory(dir)) {
-                        try {
-                            tenants.add(UUID.fromString(dir.getFileName().toString()));
-                        } catch (IllegalArgumentException ignored) {
-                            // skip non-UUID directories
-                        }
+                        tenants.add(dir.getFileName().toString());
                     }
                 }
                 return tenants.stream();
@@ -179,9 +169,9 @@ public class FilesystemObjectStorage implements ObjectStorage {
     }
 
     @Override
-    public Multi<BlobRef> listContainers(UUID tenantId) {
+    public Multi<BlobRef> listContainers(String tenantId) {
         return Multi.createFrom().items(() -> {
-            Path tenantPath = Path.of(root, tenantId.toString());
+            Path tenantPath = Path.of(root, tenantId);
             if (!Files.isDirectory(tenantPath)) {
                 return java.util.stream.Stream.<BlobRef>empty();
             }

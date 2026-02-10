@@ -12,7 +12,7 @@ proprietary (SaaS or licensed). See ADR-019 for details.
 
 | Model | Vault hosted by | Gateway | Brand | Identity |
 |-------|----------------|---------|-------|----------|
-| **SaaS** | Us | Our Gateway (always) | Libragraph | Our Keycloak |
+| **SaaS** | Us | Our Gateway (always) | LibRAGraph | Our Keycloak |
 | **ISV (Gateway SaaS)** | ISV | Our Gateway (paid) | ISV's | ISV's IdP |
 | **ISV (Gateway Licensed)** | ISV | ISV runs Gateway (licensed) | ISV's | ISV's IdP |
 | **Private (public)** | User | Our Gateway (optional, paid) | User's choice | Passkey / OIDC |

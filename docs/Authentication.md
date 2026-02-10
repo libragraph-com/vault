@@ -85,7 +85,7 @@ organization (1 per Vault instance minimum)
 First boot runs a setup wizard (interactive UI or headless config):
 
 1. **Use case:** Personal or Business
-2. **Account:** Create passkey (always) + optionally "Sign in with Libragraph
+2. **Account:** Create passkey (always) + optionally "Sign in with LibRAGraph
    Account" (redirects to Console for Cognito)
 3. **Vault creates:** default organization + default tenant + admin principal
    linked to the enrolled passkey
@@ -476,7 +476,7 @@ RLS handles data scope; application code handles capability scope.
    a. "Welcome to Vault. Let's set up your instance."
    b. "How will you use Vault?" → Personal / Business
    c. "Create your admin passkey" → WebAuthn enrollment
-   d. (Optional) "Connect to Libragraph Cloud?" → redirects to Console
+   d. (Optional) "Connect to LibRAGraph Cloud?" → redirects to Console
 3. Vault creates:
    - Organization (name from wizard or default)
    - Tenant (default)

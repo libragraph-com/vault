@@ -5,6 +5,9 @@ plugins {
 val quarkusVersion: String by project
 
 subprojects {
+    group = rootProject.findProperty("projectGroup") as String
+    version = rootProject.findProperty("projectVersion") as String
+
     apply(plugin = "java")
 
     repositories {

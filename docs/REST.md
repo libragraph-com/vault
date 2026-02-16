@@ -18,7 +18,7 @@ See [Quarkus REST Guide](https://quarkus.io/guides/rest).
 
 ## JWT Identity
 
-Every request carries a JWT from Keycloak (see [Identity](Identity.md)):
+Every request carries a Vault-issued JWT obtained via OIDC token exchange (see [Identity](Identity.md)):
 
 ```java
 @Path("/api")

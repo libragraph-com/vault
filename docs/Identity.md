@@ -14,7 +14,7 @@ the full authorization context (org, tenant, roles, sandbox).
 
 ```
                ┌──────────────┐
-               │ External IdP │  (Keycloak, Cognito, Okta, Google, etc.)
+               │ External IdP │  (Cognito, Okta, Google, etc.)
                │              │  Authenticates the user.
                └──────┬───────┘
                       │ IdP JWT (thin: sub, iss, email)
@@ -102,27 +102,15 @@ vault.auth.issuer.auto-provision=true
 vault.auth.issuer.default-role=vault:read
 ```
 
-## Quarkus OIDC Integration
+## Authentication Implementation Status
 
-Quarkus OIDC validates the Vault-issued JWTs on API endpoints:
+**Not yet implemented.** Authentication will use:
 
-```properties
-# Vault's own JWKS for API token validation
-quarkus.oidc.auth-server-url=http://localhost:8443
-quarkus.oidc.client-id=vault-api
-quarkus.oidc.application-type=service  # API-only (no web login flow)
-```
+- **Cloud deployments:** Cognito via Console (passkey, social login, email OTP) — see [ADR-020](../../pm/docs/decisions/adr-020-global-identity-and-console.md), [ADR-030](../../pm/docs/decisions/adr-030-invitations-and-roles.md)
+- **Local vaults:** Passkey/WebAuthn (primary), password+TOTP (fallback) — see [ADR-030](../../pm/docs/decisions/adr-030-invitations-and-roles.md) §10a
 
-For dev mode with Keycloak as the external IdP:
-
-```properties
-# application-dev.properties
-quarkus.keycloak.devservices.enabled=true
-quarkus.keycloak.devservices.realm-path=dev-realm.json
-vault.auth.issuer.discovery-url=http://localhost:8180/realms/vault-dev/.well-known/openid-configuration
-```
-
-See [Quarkus OIDC Guide](https://quarkus.io/guides/security-oidc-bearer-token-authentication).
+When implemented, Quarkus OIDC will validate Vault-issued JWTs on API endpoints.
+See [Authentication.md](Authentication.md) for the complete reference token model.
 
 ## Vault JWT Claims
 
@@ -195,12 +183,12 @@ Both are Vault-signed JWTs validated the same way. They differ in scope and life
 
 ## Dev Mode
 
-Quarkus Dev Services can auto-provision a Keycloak container as the external IdP:
+**Authentication not yet implemented.** For development, the DiagnosticResource
+operates without authentication.
 
-```properties
-# application-dev.properties
-quarkus.keycloak.devservices.enabled=true
-quarkus.keycloak.devservices.realm-path=dev-realm.json
-```
+When authentication is implemented, dev mode will use the same authentication
+methods as production:
+- Mock Cognito tokens for OIDC exchange testing
+- Passkey test credentials for WebAuthn flow testing
 
-See [Quarkus Keycloak Dev Services](https://quarkus.io/guides/security-openid-connect-dev-services).
+See [Authentication.md](Authentication.md) for implementation plan.

@@ -44,7 +44,6 @@ Tests use Quarkus DevServices (Testcontainers) to auto-provision ephemeral Postg
 | PostgreSQL | `localhost:5432` | `vault` / `vault_dev_password` / db: `vault` |
 | MinIO API | `localhost:9000` | `minioadmin` / `minioadmin` |
 | MinIO Console | `localhost:9001` | `minioadmin` / `minioadmin` |
-| Keycloak Admin | `localhost:8180/admin` | `admin` / `admin` |
 
 ### Direct database access
 

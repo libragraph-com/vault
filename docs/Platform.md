@@ -10,17 +10,21 @@ full architectural rationale (open-core model, ISV white-labeling, Gateway proto
 Vault serves five deployment models. Vault is always open source; Gateway is
 proprietary (SaaS or licensed). See ADR-019 for details.
 
-| Model | Vault hosted by | Gateway | Brand | Identity |
-|-------|----------------|---------|-------|----------|
-| **SaaS** | Us | Our Gateway (always) | LibRAGraph | Our Keycloak |
-| **ISV (Gateway SaaS)** | ISV | Our Gateway (paid) | ISV's | ISV's IdP |
-| **ISV (Gateway Licensed)** | ISV | ISV runs Gateway (licensed) | ISV's | ISV's IdP |
-| **Private (public)** | User | Our Gateway (optional, paid) | User's choice | Passkey / OIDC |
-| **Private (firewall)** | User | None | N/A | Passkey / NAS delegation |
+| Model | Vault hosted by | Gateway | Brand | Authentication | License |
+|-------|----------------|---------|-------|----------------|---------|
+| **SaaS** | Us | Our Gateway (always) | LibRAGraph | Cognito (Console) | Vault: AGPL / Console+Gateway: BSL 1.1 |
+| **ISV (Gateway SaaS)** | ISV | Our Gateway (paid) | ISV's | ISV's IdP | Vault: AGPL / Gateway: BSL 1.1 |
+| **ISV (Gateway Licensed)** | ISV | ISV runs Gateway (licensed) | ISV's | ISV's IdP | Vault: AGPL / Gateway: BSL 1.1 commercial |
+| **Private (public)** | User | Our Gateway (optional, paid) | LibRAGraph | Passkey (primary), Password+TOTP (fallback) | Vault: AGPL / Gateway: BSL 1.1 |
+| **Private (firewall)** | User | None | N/A | Passkey (primary), Password+TOTP (fallback) | Vault: AGPL |
 
 **Vault without Gateway is a complete product.** A private NAS user gets full
 ingestion, storage, search, MCP integration, and local auth with zero cost.
 Gateway adds internet connectivity: public endpoint, SSL, DDoS, OAuth relay.
+
+See [ADR-025](../../pm/docs/decisions/adr-025-platform-deployment-and-code-sharing.md)
+for deployment architecture and [ADR-028](../../pm/docs/decisions/adr-028-commercial-model.md)
+for the commercial model (cloud credits, subscriptions, accounts).
 
 ## App Configuration
 
@@ -79,20 +83,19 @@ based on profile. See [ObjectStore](ObjectStore.md).
 
 ### OIDC Configuration per Profile
 
-Each config profile specifies its trusted issuer:
+**Note:** Authentication is not yet implemented. When implemented, each config
+profile will specify its trusted issuer:
 
 ```properties
-# application-dev.properties (Keycloak via Dev Services)
-vault.auth.issuer.discovery-url=http://localhost:8180/realms/vault-dev/.well-known/openid-configuration
-vault.auth.issuer.client-id=vault-app
-
-# application-prod.properties (any OIDC provider)
-vault.auth.issuer.discovery-url=https://auth.acmedocs.com/.well-known/openid-configuration
+# application-prod.properties (OIDC provider for cloud-connected vaults)
+vault.auth.issuer.discovery-url=https://auth.libragraph.com/.well-known/openid-configuration
 vault.auth.issuer.client-id=vault-integration
+
+# Local vaults use passkey/WebAuthn (no external IdP required)
 ```
 
-Additional trusted issuers can be registered at runtime via the Management API.
-See [Identity](Identity.md).
+See [Identity](Identity.md) and [Authentication](Authentication.md) for the
+complete authentication model (ADR-014, ADR-030).
 
 ### Gateway Configuration
 
@@ -140,6 +143,12 @@ Management API (`/admin/*`).
 - Role assignments and principals are org-scoped
 - For private vaults: typically one org created during `vault init`
 - For ISVs: one org per ISV, with tenants for each of the ISV's customers
+
+**Note on Console integration:** Vault's Organization (content/data boundary)
+is independent from Console's Org and Account (billing/admin boundary). See
+[ADR-028](../../pm/docs/decisions/adr-028-commercial-model.md) §4 for the
+Console entity model (User ↔ Org → Account → Service). A Console account owns
+a gateway service; that gateway can route to one or more Vault organizations.
 
 ### Tenant
 

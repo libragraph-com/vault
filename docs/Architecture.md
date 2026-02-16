@@ -11,7 +11,6 @@ Docker Compose:
   ├── vault         (this app — Quarkus)
   ├── postgres:18   (database)
   ├── minio         (object storage)
-  ├── keycloak      (OIDC/IDP)
   └── ollama        (embeddings, optional)
 ```
 
@@ -20,8 +19,11 @@ Docker Compose:
 ```
 K8s Cluster:
   ├── vault         (this app)
-  ├── keycloak      (OIDC/IDP)
   └── gateway       (reverse proxy, TLS termination)
+
+Authentication:
+  ├── Cloud:        Cognito via Console (ADR-020, ADR-030)
+  └── Local:        Passkey/WebAuthn (ADR-030)
 
 Managed Services:
   ├── PostgreSQL    (RDS / Neon / Supabase)

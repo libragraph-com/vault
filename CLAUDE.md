@@ -15,6 +15,8 @@ See [README.md](README.md) for overview and documentation index.
 - PostgreSQL only — no SQLite, no H2 in prod ([ADR-001](../pm/docs/decisions/adr-001-postgresql-only.md))
 - Store outputs, not inputs — deduplicate leaves, keep manifests ([ADR-002](../pm/docs/decisions/adr-002-store-outputs-not-inputs.md))
 - Event-driven ingestion — CDI events, fan-in synchronization ([ADR-008](../pm/docs/decisions/adr-008-event-driven-ingestion.md))
+- Open-core architecture — Vault (AGPL), Console/Gateway (BSL) ([ADR-019](../pm/docs/decisions/adr-019-open-core-gateway-model.md))
+- Passwordless authentication — passkey primary, OIDC exchange, no passwords ([ADR-014](../pm/docs/decisions/adr-014-authentication-principals.md), [ADR-030](../pm/docs/decisions/adr-030-invitations-and-roles.md))
 - BlobRef — `(hash, leafSize, isContainer)` — no extension, no storedSize
 - Virtual threads for blocking I/O (JDBC, object storage)
 - Flyway for SQL migrations (SQL-file-based, no XML)

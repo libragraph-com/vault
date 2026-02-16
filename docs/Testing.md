@@ -195,7 +195,6 @@ Quarkus auto-provisions external dependencies for dev and test:
 |---------|-----------|-----------------|
 | PostgreSQL | `quarkus-jdbc-postgresql` | Yes (testcontainer) |
 | MinIO/S3 | Manual (MinioClientProducer) | Via Docker Compose |
-| Keycloak | `quarkus-oidc` | Yes (keycloak container) |
 
 No Docker Compose needed for tests. Testcontainers handles PostgreSQL automatically.
 

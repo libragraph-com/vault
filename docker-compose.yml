@@ -47,26 +47,6 @@ services:
       echo 'Bucket vault-dev created';
       "
 
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.0
-    container_name: vault-keycloak
-    command: start-dev --import-realm
-    environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      KC_HTTP_PORT: 8180
-    ports:
-      - "8180:8180"
-    volumes:
-      - keycloak_data:/opt/keycloak/data
-      - ./docker/keycloak/vault-dev-realm.json:/opt/keycloak/data/import/vault-dev-realm.json:ro
-    healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8180 && echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\n\r\n' >&3 && cat <&3 | grep -q '\"status\": \"UP\"'"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 30s
-
   ollama:
     image: ollama/ollama
     container_name: vault-ollama
@@ -94,5 +74,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
-  keycloak_data:
   ollama_data:

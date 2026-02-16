@@ -20,7 +20,7 @@ Content-addressed storage and knowledge graph system built on Quarkus.
 |----------|-------------|
 | [Architecture](docs/Architecture.md) | Deployment topologies, module structure |
 | [Platform](docs/Platform.md) | Configuration, multi-tenancy, partitioning |
-| [Identity](docs/Identity.md) | Keycloak, authentication, tokens |
+| [Identity](docs/Identity.md) | Authentication, OIDC, tokens, passkeys |
 | [Lifecycle](docs/Lifecycle.md) | Service boot, health checks, dependency ordering |
 
 ### Data Layer
@@ -59,7 +59,7 @@ Content-addressed storage and knowledge graph system built on Quarkus.
 | Language | Java 21 |
 | Database | PostgreSQL 18 (JDBI, Flyway) |
 | Object Storage | MinIO (local), S3 (cloud) |
-| Auth | Keycloak (OIDC) |
+| Auth | OIDC (Cognito for cloud, passkey for local) |
 | Build | Gradle (multi-module) |
 | Serialization | Protobuf (manifests) |
 | Hashing | BLAKE3-128 |
@@ -67,4 +67,11 @@ Content-addressed storage and knowledge graph system built on Quarkus.
 
 ## License
 
-AGPL-3.0 — See [LICENSE](LICENSE)
+**Vault:** AGPL-3.0 with commercial dual-license option — See [LICENSE](LICENSE)
+
+LibRAGraph uses an **open-core model** ([ADR-019](../pm/docs/decisions/adr-019-open-core-gateway-model.md), [ADR-028](../pm/docs/decisions/adr-028-commercial-model.md)):
+- **Vault** (this repo): AGPL-3.0 — genuinely open source. Commercial dual-license available for ISVs who need to avoid copyleft obligations.
+- **Console & Gateway**: BSL 1.1 — source-available, converts to Apache 2.0 after 3-4 years
+- **OAuth Relay**: Apache 2.0
+
+This preserves vault sovereignty (fully functional without our services) while protecting cloud service revenue.

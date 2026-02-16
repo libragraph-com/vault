@@ -321,17 +321,81 @@ Primary auth method for local Vault access.
 
 ### 6b. OIDC (via Console)
 
-For cloud access. Vault never talks to Cognito directly.
+For cloud-connected deployments. Vault never talks to Cognito directly—Console
+is the authentication broker.
 
-- **Flow:** Console authenticates user via Cognito, then calls
-  `POST /auth/exchange` on Vault (server-side, through Gateway) with the
-  Cognito ID token.
-- **Vault validates:** Signature against trusted issuer's JWKS.
-  Issuer must be in Vault's configured trusted issuers list.
-- **Resolution:** `(method='oidc', issuer=<cognito_url>, external_sub=<cognito_sub>)`
-  → principal. Auto-provision if configured.
-- **Result:** Vault creates session, returns JWT to Console. Console passes
-  JWT to SPA.
+#### Console Integration Flow
+
+```
+1. User authenticates to Console
+   → Cognito (passkey, Google, Apple, email OTP)
+   → Console gets Cognito ID token
+
+2. Console exchanges token with Vault
+   → POST /auth/exchange (server-side, through Gateway)
+   → Authorization: Bearer <cognito-id-token>
+   → Vault validates signature against trusted issuer's JWKS
+   → Vault resolves (method='oidc', issuer=<cognito_url>, external_sub=<cognito_sub>) → principal
+   → Vault creates session, returns Vault JWT
+
+3. Console passes Vault JWT to SPA
+   → SPA uses Vault JWT for all vault operations
+   → User sees seamless experience: authenticate once to Console, access all vaults
+```
+
+#### Console Entity Model vs Vault Principals
+
+Console and Vault have independent but linked identity models (see
+[ADR-028](../../pm/docs/decisions/adr-028-commercial-model.md) §4,
+[ADR-030](../../pm/docs/decisions/adr-030-invitations-and-roles.md)):
+
+| Console (DynamoDB) | Vault (PostgreSQL) | Relationship |
+|--------------------|-------------------|--------------|
+| **User** (Cognito identity) | **Principal** (vault identity) | Linked via identity_link (method='oidc', external_sub=cognito_sub) |
+| **Org** (billing/admin boundary) | **Organization** (data boundary) | Separate — no direct mapping required |
+| **Account** (credit pool, services) | N/A | Console-only concept (billing) |
+
+**Key principle:** Console manages billing and connectivity (accounts, credits,
+gateway instances). Vault manages content access (principals, tenants, roles).
+A Console user may have access to multiple vaults, each with independent
+principal/role assignments.
+
+#### Invitation Flow Integration
+
+Invitations bridge Console and Vault identities (see
+[ADR-030](../../pm/docs/decisions/adr-030-invitations-and-roles.md) §5):
+
+**Gateway-connected vault sharing:**
+1. Admin creates share in Vault UI → "Share via email"
+2. Vault signs vault grants (tenant/sandbox roles) with vault's signing key
+3. Vault sends signed grants to Console via Gateway
+4. Console stores invitation with vault grants as opaque payload
+5. Invitee receives email, clicks link, authenticates to Console (Cognito)
+6. Console forwards vault grants + signature to Vault for validation
+7. Vault verifies its own signature, creates principal (if new), applies roles
+8. Result: Invitee has Console user + Vault principal, linked via identity_link
+
+**Local vault sharing (no Gateway):**
+1. Admin creates invitation in Vault UI
+2. Vault generates QR code with LAN-scoped URL
+3. Invitee scans QR code, enrolls passkey directly with Vault
+4. Vault creates principal, applies roles
+5. Result: Local principal, no Console involvement
+
+#### Auto-Provisioning
+
+When Console exchanges a Cognito token for a Vault JWT:
+- If no principal exists for that Cognito sub: Vault creates one (if
+  auto-provisioning enabled for that trusted issuer)
+- Default role assigned per trusted issuer config (typically `vault:read`)
+- This enables "sign in with Console" to work seamlessly—no pre-registration
+  required
+
+**Access requests:** If a Console user can see a vault in the Dashboard (because
+their account owns the gateway service) but has no vault principal, they can
+request access. This creates a `vault.access.requested` alert for vault admins
+(see [ADR-029](../../pm/docs/decisions/adr-029-alerts-and-notifications.md) §3,
+[ADR-030](../../pm/docs/decisions/adr-030-invitations-and-roles.md) §5e).
 
 ### 6c. Trusted Issuers (ISV / third-party IdP)
 

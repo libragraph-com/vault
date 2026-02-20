@@ -73,13 +73,13 @@ vault.object-store.type=s3
 vault.object-store.bucket=vault-prod-blobs
 ```
 
-Quarkus CDI selects the right `@Alternative` or `@LookupIfProperty` bean
-based on profile. See [ObjectStore](ObjectStore.md).
+Quarkus CDI selects the right implementation at build time via
+`@IfBuildProperty(name = "vault.object-store.type", stringValue = "s3")`
+(or `"filesystem"`). See [ObjectStore](ObjectStore.md).
 
-> **DECISION:** All implementations are always available; selected via
-> YAML config property (`vault.object-store.type`). CDI producer reads
-> config and returns the correct `ObjectStorage` implementation. No
-> annotation-based selection — config-driven only.
+> **DECISION:** All implementations are compiled in; activated via
+> build-time config property (`vault.object-store.type`). Quarkus
+> `@IfBuildProperty` eliminates unused beans at build time.
 
 ### OIDC Configuration per Profile
 

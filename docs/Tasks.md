@@ -155,10 +155,10 @@ before dispatching.
 ```
 Example: Ollama embedding service, max_concurrency = 2
 
-Task A (enrichment) → requires "ollama" → dispatched (load 1/2)
-Task B (enrichment) → requires "ollama" → dispatched (load 2/2)
-Task C (enrichment) → requires "ollama" → BLOCKED (load 2/2, at capacity)
-Task A completes    → load drops to 1/2 → Task C unblocked
+Task A → requires "ollama" → dispatched (load 1/2)
+Task B → requires "ollama" → dispatched (load 2/2)
+Task C → requires "ollama" → BLOCKED (load 2/2, at capacity)
+Task A completes → load drops to 1/2 → Task C unblocked
 ```
 
 ## State Machine
@@ -227,7 +227,9 @@ public class IngestCompletionListener {
 | `ingest.container` | `IngestInput(sourcePath)` | `IngestOutput(containerRef, leafCount)` | Background | objectstore, database |
 | `reconstruct.container` | `ReconstructInput(containerRef, outputPath)` | `ReconstructOutput(outputPath, verified)` | Background | objectstore, database |
 | `rebuild.sql` | `RebuildInput(tenantId)` | `RebuildOutput(leafCount, manifestCount)` | Direct | objectstore, database |
-| `enrichment` | `EnrichmentInput(leafRef)` | `EnrichmentOutput(metadata)` | Direct | ollama (throttled) |
+
+> **Enrichment** is handled by a plugin pipeline (ADR-034), not a single task type.
+> Enrichment plugins run as steps within a batch processing task.
 
 See [Ingestion](Ingestion.md), [Reconstruction](Reconstruction.md), [RebuildSQL](RebuildSQL.md).
 
@@ -490,8 +492,8 @@ public class ScheduledTasks {
     @Inject TaskService taskService;
 
     @Scheduled(cron = "0 0 2 * * ?")  // 2 AM daily
-    void nightlyEnrichment() {
-        taskService.submit(EnrichmentTask.class, new EnrichmentInput("pending"));
+    void nightlyRebuild() {
+        taskService.submit(RebuildTenantSqlTask.class, new RebuildInput(tenantId));
     }
 }
 ```
@@ -549,12 +551,12 @@ For workflows that need multiple events before creating a task:
 
 ```java
 @JoinTrigger(
-    taskTypes = {"extract.id3", "extract.exif"},
-    joinKey = "hash",
-    workflow = "post-enrichment"
+    taskTypes = {"ingest.container", "rebuild.sql"},
+    joinKey = "tenantId",
+    workflow = "post-ingest"
 )
-public TaskSpec<?> onAllEnrichmentsComplete(List<TaskCompletedEvent> events) {
-    return TaskSpec.of(BuildSearchIndexTask.class, new BuildSearchInput(hash));
+public TaskSpec<?> onAllIngestsComplete(List<TaskCompletedEvent> events) {
+    return TaskSpec.of(BuildSearchIndexTask.class, new BuildSearchInput(tenantId));
 }
 ```
 

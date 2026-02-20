@@ -9,7 +9,7 @@ Primary development and personal-use deployment.
 ```
 Docker Compose:
   ├── vault         (this app — Quarkus)
-  ├── postgres:18   (database)
+  ├── postgres:17   (database)
   ├── minio         (object storage)
   └── ollama        (embeddings, optional)
 ```
@@ -51,13 +51,11 @@ vault/
 │   ├── core/             # Ingestion, reconstruction, blob storage, events
 │   ├── formats/          # FormatHandlerFactory, Handler, DetectionCriteria, codecs, Tika
 │   ├── api/              # REST endpoints (RESTEasy)
-│   ├── cli/              # CLI (quarkus-picocli)
-│   ├── mcp/              # MCP server (AI integration)
-│   └── fuse/             # FUSE virtual filesystem
+│   └── gateway/          # WebSocket client to cloud Gateway (planned)
 └── app/                  # Quarkus application entry point
 ```
 
-**Dependency direction:** `shared/types` ← `shared/utils` ← `modules/formats` ← `core` ← `api`, `cli`, `mcp`, `fuse`
+**Dependency direction:** `shared/types` ← `shared/utils` ← `modules/formats` ← `core` ← `api`
 
 > **NOTE:** Multi-module requires each module to produce a Jandex index for
 > CDI bean discovery. See

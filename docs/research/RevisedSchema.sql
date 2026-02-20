@@ -25,10 +25,9 @@ INSERT INTO entry_type VALUES
 	(2, 'symlink');
 
 -- ============================================================
--- Identity (from KeyCloak)
+-- Identity
 -- ============================================================
 
--- orgs (from KeyCloak).
 -- UUIDs are global (gateways/SaaS), ids local.
 CREATE TABLE organization (
 	id				SERIAL PRIMARY KEY,
@@ -36,7 +35,7 @@ CREATE TABLE organization (
 	name			CITEXT NOT NULL
 );
 
--- tenants (from KeyCloak)
+-- tenants
 CREATE TABLE tenant (
 	id				SERIAL PRIMARY KEY,
 	global_id		UUID NULL,

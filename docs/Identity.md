@@ -1,6 +1,10 @@
 # Identity
 
-Authentication and authorization via OIDC token exchange.
+Authentication and authorization overview.
+
+> **Canonical reference:** [Authentication.md](Authentication.md) is the single
+> source of truth for the token model, session management, RLS enforcement, and
+> bootstrap flow. This document is a summary and entry point.
 
 See [ADR-019](../../pm/docs/decisions/adr-019-open-core-gateway-model.md) for the
 full architectural rationale (open-core model, ISV white-labeling, deployment models).
@@ -9,8 +13,9 @@ full architectural rationale (open-core model, ISV white-labeling, deployment mo
 
 Vault separates **authentication** (who are you?) from **authorization** (what can you do?).
 
-Any OIDC-compliant IdP can authenticate users. Vault issues its own JWTs carrying
-the full authorization context (org, tenant, roles, sandbox).
+Any OIDC-compliant IdP can authenticate users. Vault uses **reference tokens** —
+JWTs are signed session pointers; the database is the single authority for session
+validity and authorization context.
 
 ```
                ┌──────────────┐
@@ -22,13 +27,14 @@ the full authorization context (org, tenant, roles, sandbox).
                ┌──────────────┐
                │    Vault     │  POST /auth/exchange
                │              │  Validates IdP JWT, looks up principal,
-               │              │  loads org/tenant/roles/sandbox from DB.
+               │              │  creates DB session, returns Vault JWT.
                └──────┬───────┘
-                      │ Vault JWT (fat: sub, org_id, tenant_id, roles, sandbox)
+                      │ Vault JWT (reference: sub, jti, exp — no claims)
                       ▼
                ┌──────────────┐
                │  Vault API   │  Authorization: Bearer <vault-jwt>
-               │              │  Stateless validation — no DB lookup per request.
+               │              │  Looks up session by jti, loads authorization
+               │              │  from DB, sets RLS session variables per request.
                └──────────────┘
 ```
 
@@ -74,10 +80,12 @@ All methods produce the same Vault JWT format. See ADR-019 for details.
 
 ## Trusted Issuer Configuration
 
-External IdPs are registered as trusted issuers (org-scoped):
+External IdPs are registered as trusted issuers (org-scoped). See
+[Authentication.md §6c](Authentication.md#6c-trusted-issuers-isv--third-party-idp)
+for the `trusted_issuer` table schema.
 
 ```
-POST /admin/issuers
+POST /sys/issuers
 Authorization: Bearer <admin-vault-jwt>
 {
   "name": "AcmeDocs Production",
@@ -114,36 +122,33 @@ See [Authentication.md](Authentication.md) for the complete reference token mode
 
 ## Vault JWT Claims
 
-The Vault JWT carries the full security context for each request:
+Vault JWTs are **reference tokens** — minimal signed pointers to a DB-backed session:
 
-```java
-@Inject SecurityIdentity identity;
-@Inject JsonWebToken jwt;
-
-// Standard claims
-String principalId = jwt.getSubject();       // "principal_123"
-Set<String> roles = identity.getRoles();     // ["vault:read", "vault:write"]
-
-// Vault claims
-String orgId = jwt.getClaim("org_id");       // "org_acmedocs"
-String tenantId = jwt.getClaim("tenant_id"); // "t_acme_corp"
-String sandbox = jwt.getClaim("sandbox");    // null or "sandbox_123"
+```json
+{
+  "iss": "vault:{instance_id}",
+  "sub": "{principal_global_id}",
+  "jti": "{session_id}",
+  "exp": 1707500000,
+  "iat": 1707496400
+}
 ```
 
-Claims are populated from Vault's DB during token exchange — not from the
-external IdP. The external IdP only provides authentication (`iss`, `sub`).
+No roles, tenant, sandbox, or org claims in the JWT. Authorization context is
+loaded from the database per request as part of RLS session variable setup.
+See [Authentication.md §5](Authentication.md) for the full reference token model.
 
 ## Role Model
 
 | Role | Scope | Permissions |
 |------|-------|------------|
-| `vault:admin` | Org | Full control, manage tenants/principals/issuers |
-| `vault:write` | Tenant | Ingest, delete |
-| `vault:read` | Tenant | Query, download, reconstruct |
-| `vault:sandbox` | Sandbox | Read within sandbox filter |
+| `vault:admin` | Tenant | Full control, manage principals/issuers, all data operations |
+| `vault:write` | Tenant | Ingest, upload, modify metadata, delete entries |
+| `vault:read` | Tenant | Browse, search, download, view metadata |
 
-Roles are assigned in Vault's DB and carried in the Vault JWT.
-Managed via the Management API (`/admin/tenants/{id}/principals`).
+Roles are hierarchical (`admin` ⊃ `write` ⊃ `read`), assigned per principal
+per tenant, and stored in Vault's DB. Sandbox is a separate permissions boundary,
+not a role — see [Authentication.md §4](Authentication.md).
 
 ## Token Types
 
@@ -177,7 +182,9 @@ Authorization: Bearer <vault-jwt>
 - **Use case:** Service tokens for LLMs, share links, automation, MCP access
 - **Storage:** Token hash stored in DB for revocation
 
-Both are Vault-signed JWTs validated the same way. They differ in scope and lifetime.
+All token types are DB-backed sessions. Service tokens have no expiry but can
+be revoked (delete the session row). See [Authentication.md §5](Authentication.md)
+for the session table schema.
 
 > **DEPENDENCY:** Delegation token issuance requires [REST](REST.md) API endpoints.
 

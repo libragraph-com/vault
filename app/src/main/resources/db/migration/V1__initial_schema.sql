@@ -26,7 +26,7 @@ INSERT INTO entry_type VALUES
     (2, 'symlink');
 
 -- ============================================================
--- Identity (from KeyCloak)
+-- Identity
 -- ============================================================
 
 CREATE TABLE organization (

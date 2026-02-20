@@ -161,18 +161,19 @@ A data partition within an Organization. A single org has 1+ Tenants.
 
 ```sql
 -- Every data table includes tenant scoping
-SELECT * FROM leaves WHERE tenant_id = ? AND content_hash = ?
+SELECT br.* FROM blob b
+  JOIN blob_ref br ON b.blob_ref_id = br.id
+  WHERE b.tenant_id = ? AND br.content_hash = ?
 ```
 
 ```
-# Object store layout
-{org-id}/{tenant-id}/{hash}-{leafSize}      # leaf
-{org-id}/{tenant-id}/{hash}-{leafSize}_     # container (manifest)
+# Object store layout (bucket-per-tenant)
+{bucket-prefix}{tenantId}/{hash}-{leafSize}      # leaf
+{bucket-prefix}{tenantId}/{hash}-{leafSize}_     # container (manifest)
 ```
 
-> **DEFERRED:** Tenant_id path structure (path component vs flat key vs
-> bucket-per-tenant) — needs more discussion. For ISVs hosting their own
-> Vault (single org per instance), the org-id prefix may be unnecessary.
+Tenant isolation is bucket-per-tenant in S3/MinIO, directory-per-tenant in
+filesystem backend. See [ObjectStore](ObjectStore.md) for details.
 
 ### Sandbox
 
@@ -182,18 +183,20 @@ A filtered view of a Tenant for access control and data masking.
 - Rules can expand to cover any data in the parent tenant (search predicates)
 - Structurally belongs to a Tenant
 - Use cases: shared workspaces, client-facing views, compliance boundaries
-- Sandbox scope is carried as a claim in the Vault JWT
-- Managed via Management API (`/admin/tenants/{id}/sandboxes`)
-
-> **DEFERRED:** Sandbox implementation (RLS vs application-level filtering vs
-> materialized views). Sandbox scope is now a Vault JWT claim; enforcement
-> mechanism is still open.
+- Sandbox is a property of the DB-backed session (not a JWT claim)
+- Enforced via RLS at the database layer
+- See [Authentication.md §4](Authentication.md) for sandbox design
 
 ## Tokens
 
-Vault issues two types of JWTs. See [Identity](Identity.md) for details.
+Vault uses **reference tokens** — JWTs are signed session pointers, not
+self-contained authorization documents. The database is the single authority for
+session validity and authorization context. See [Authentication.md](Authentication.md)
+for the full model.
 
-- **Session tokens** — issued by `/auth/exchange` (1h + refresh), for interactive sessions
-- **Delegation tokens** — issued by `/api/tokens` (configurable lifetime), for service access, shares, MCP
+- **Session tokens** — issued by `/auth/exchange` or `/auth/passkey`, for interactive sessions
+- **Delegation tokens** — created by authenticated users via API, for MCP agents, share links, automation
+- **Service tokens** — created by admins, no expiry (revocable), for machine-to-machine access
 
-Both are Vault-signed JWTs carrying org_id, tenant_id, roles, and sandbox scope.
+All token types are DB-backed sessions. JWT carries only `sub`, `jti`, `exp` —
+authorization is loaded from DB per request.

@@ -26,7 +26,7 @@ Content-addressed storage and knowledge graph system built on Quarkus.
 ### Data Layer
 | Document | Description |
 |----------|-------------|
-| [Database](docs/Database.md) | PostgreSQL, Liquibase migrations, JDBI access |
+| [Database](docs/Database.md) | PostgreSQL, Flyway migrations, JDBI access |
 | [ObjectStore](docs/ObjectStore.md) | Blob storage abstraction (FS, MinIO, S3) |
 
 ### Processing
@@ -56,8 +56,8 @@ Content-addressed storage and knowledge graph system built on Quarkus.
 | Component | Technology |
 |-----------|------------|
 | Framework | Quarkus (virtual threads) |
-| Language | Java 21 |
-| Database | PostgreSQL 18 (JDBI, Flyway) |
+| Language | Java 25 (`--release 21` bytecode) |
+| Database | PostgreSQL 17 (JDBI, Flyway) |
 | Object Storage | MinIO (local), S3 (cloud) |
 | Auth | OIDC (Cognito for cloud, passkey for local) |
 | Build | Gradle (multi-module) |

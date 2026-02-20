@@ -5,7 +5,7 @@ I am fine with "hello world" level stuff" but we need to have at the end:
 Persistent Dockers for all services:
  - Postgres (with schema from research)
  - MinIO
- - KeyCloak (not integrated but provisioned)
+ - Auth: passkey (local), OIDC via Console (cloud) — see Authentication.md
  - Vault service with diagnostic endpoints
 
 I am on WSL and have installed Docker Desktop and Java25 but not much else.
